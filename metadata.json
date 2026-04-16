@@ -1,0 +1,8 @@
+{
+  "name": "Workforce Pro",
+  "description": "Enterprise-grade workforce management and attendance tracking system with geofencing and biometric verification.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
