@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
-// Rutas
 import authRoutes from './routes/auth.js';
 import attendanceRoutes from './routes/attendance.js';
 
@@ -10,28 +9,27 @@ dotenv.config();
 
 const app = express();
 
-//
-// 🔹 Middlewares globales
-//
-app.use(cors());
+const corsOptions = process.env.FRONTEND_ORIGIN
+  ? { origin: process.env.FRONTEND_ORIGIN }
+  : {};
+
+// Middlewares globales
+app.use(cors(corsOptions));
 app.use(express.json());
 
-//
-// 🔹 Rutas principales
-//
+// Rutas principales
 app.use('/api/auth', authRoutes);
 app.use('/api/attendance', attendanceRoutes);
 
-//
-// 🔹 Ruta base (test)
-//
 app.get('/', (req, res) => {
-  res.send('API funcionando 🚀');
+  res.send('API funcionando');
 });
 
-//
-// 🔹 Middleware de errores (MUY IMPORTANTE)
-//
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Middleware de errores
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({

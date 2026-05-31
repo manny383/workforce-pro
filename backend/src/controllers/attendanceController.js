@@ -3,12 +3,18 @@ import { pool } from '../config/db.js';
 // 🔹 Registrar entrada
 export const clockIn = async (req, res) => {
   try {
-    const { user_id } = req.body;
+    const { user_id, locacion_id, latitud, longitud } = req.body;
 
     const [result] = await pool.query(
-      `INSERT INTO attendance (user_id, check_in)
-       VALUES (?, NOW())`,
-      [user_id]
+      `INSERT INTO asistencias (
+         usuario_id,
+         locacion_id,
+         entrada,
+         latitud_entrada,
+         longitud_entrada
+       )
+       VALUES (?, ?, NOW(), ?, ?)`,
+      [user_id, locacion_id || null, latitud || null, longitud || null]
     );
 
     res.json({
@@ -25,17 +31,22 @@ export const clockIn = async (req, res) => {
 // 🔹 Registrar salida
 export const clockOut = async (req, res) => {
   try {
-    const { user_id } = req.body;
+    const { user_id, latitud, longitud } = req.body;
 
     const [result] = await pool.query(
-      `UPDATE attendance 
-       SET check_out = NOW()
-       WHERE user_id = ? AND check_out IS NULL`,
-      [user_id]
+      `UPDATE asistencias
+       SET salida = NOW(),
+           latitud_salida = ?,
+           longitud_salida = ?
+       WHERE usuario_id = ? AND salida IS NULL
+       ORDER BY entrada DESC
+       LIMIT 1`,
+      [latitud || null, longitud || null, user_id]
     );
 
     res.json({
       message: 'Salida registrada',
+      updated: result.affectedRows,
     });
 
   } catch (error) {
@@ -50,7 +61,7 @@ export const getAttendance = async (req, res) => {
     const { user_id } = req.params;
 
     const [rows] = await pool.query(
-      `SELECT * FROM attendance WHERE user_id = ? ORDER BY check_in DESC`,
+      `SELECT * FROM asistencias WHERE usuario_id = ? ORDER BY entrada DESC`,
       [user_id]
     );
 
