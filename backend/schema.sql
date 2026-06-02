@@ -118,7 +118,11 @@ VALUES (
   'admin@workforcepro.com',
   '$2b$10$4BxauX6ceX9gQtMisMW0S.BguxwtWu8oHop6mgxYC1pRF2C2ifLsG',
   'admin'
-);
+)
+ON DUPLICATE KEY UPDATE
+  password_hash = VALUES(password_hash),
+  rol = VALUES(rol),
+  activo = TRUE;
 
 INSERT IGNORE INTO usuarios_turnos (
   usuario_id,

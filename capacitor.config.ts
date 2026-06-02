@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.bit.workforce',
-  appName: 'react-ckeck',
+  appName: 'Workforce Pro',
   webDir: 'dist'
 };
 

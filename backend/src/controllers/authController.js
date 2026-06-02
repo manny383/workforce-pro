@@ -67,8 +67,9 @@ export const login = async (req, res) => {
 
 export const register = async (req, res) => {
   try {
-    const { nombre, email, correo, password, rol = 'empleado', telefono } = req.body;
+    const { nombre, email, correo, password, telefono } = req.body;
     const userEmail = correo || email;
+    const rol = 'empleado';
 
     if (!nombre || !userEmail || !password) {
       return res.status(400).json({ message: 'Nombre, correo y password son requeridos' });
