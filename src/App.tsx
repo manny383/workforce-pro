@@ -15,6 +15,7 @@ import { ManagerDashboardView } from './pages/ManagerDashboardPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RegistrationView } from './pages/RegistrationPage';
 import { SettingsView } from './pages/SettingsPage';
+import { TeamView } from './pages/TeamPage';
 import { ProtectedRoute, PublicRoute } from './routes/ProtectedRoute';
 import { getHomePath, getUserType, getViewFromPath, getViewPath } from './routes/routeUtils';
 import type { Session, View } from './types/auth';
@@ -203,7 +204,7 @@ function AppRoutes() {
                 path="/team"
                 element={(
                   <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
-                    <PlaceholderPage view="team" onBack={() => navigate('/manager')} />
+                    {session && <TeamView session={session} onBack={() => navigate('/manager')} />}
                   </ProtectedRoute>
                 )}
               />
