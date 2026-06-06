@@ -11,6 +11,7 @@ import { cn } from './lib/utils';
 import { DashboardView } from './pages/DashboardPage';
 import { HistoryView } from './pages/HistoryPage';
 import { LoginView } from './pages/LoginPage';
+import { LocationsView } from './pages/LocationsPage';
 import { ManagerDashboardView } from './pages/ManagerDashboardPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RegistrationView } from './pages/RegistrationPage';
@@ -196,7 +197,7 @@ function AppRoutes() {
                 path="/locations"
                 element={(
                   <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
-                    <PlaceholderPage view="locations" onBack={() => navigate('/manager')} />
+                    {session && <LocationsView session={session} onBack={() => navigate('/manager')} />}
                   </ProtectedRoute>
                 )}
               />

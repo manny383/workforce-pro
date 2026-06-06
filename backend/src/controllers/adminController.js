@@ -90,3 +90,74 @@ export const updateUserStatus = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar usuario' });
   }
 };
+
+export const getLocations = async (req, res) => {
+  try {
+    const [locations] = await pool.query(
+      `SELECT id, nombre, descripcion, latitud, longitud, radio_permitido, activa, fecha_creacion
+       FROM locaciones
+       ORDER BY activa DESC, nombre ASC`
+    );
+    res.json(locations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al consultar locaciones' });
+  }
+};
+
+export const createLocation = async (req, res) => {
+  try {
+    const { nombre, descripcion, latitud, longitud, radio_permitido = 100 } = req.body;
+    const latitude = Number(latitud);
+    const longitude = Number(longitud);
+    const radius = Number(radio_permitido);
+
+    if (!nombre || !Number.isFinite(latitude) || !Number.isFinite(longitude) || !Number.isInteger(radius)) {
+      return res.status(400).json({ message: 'Nombre, coordenadas y radio valido son requeridos' });
+    }
+
+    if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180 || radius < 1) {
+      return res.status(400).json({ message: 'Las coordenadas o el radio estan fuera de rango' });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO locaciones (nombre, descripcion, latitud, longitud, radio_permitido)
+       VALUES (?, ?, ?, ?, ?)`,
+      [nombre, descripcion || null, latitude, longitude, radius]
+    );
+
+    res.status(201).json({
+      id: result.insertId,
+      nombre,
+      descripcion: descripcion || null,
+      latitud: latitude,
+      longitud: longitude,
+      radio_permitido: radius,
+      activa: 1,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear locacion' });
+  }
+};
+
+export const updateLocationStatus = async (req, res) => {
+  try {
+    const locationId = Number(req.params.id);
+    const { activa } = req.body;
+
+    if (!Number.isInteger(locationId) || typeof activa !== 'boolean') {
+      return res.status(400).json({ message: 'Datos invalidos' });
+    }
+
+    const [result] = await pool.query('UPDATE locaciones SET activa = ? WHERE id = ?', [activa, locationId]);
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: 'Locacion no encontrada' });
+    }
+
+    res.json({ message: activa ? 'Locacion activada' : 'Locacion desactivada' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar locacion' });
+  }
+};
