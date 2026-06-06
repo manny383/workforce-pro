@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, LoaderCircle, MapPin, Plus, Radar, Search, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { ArrowLeft, Crosshair, LoaderCircle, MapPin, Plus, Radar, Search, ToggleLeft, ToggleRight, X } from 'lucide-react';
+import { GoogleLocationPicker } from '../components/GoogleLocationPicker';
 import { API_URL } from '../config/api';
+import { getCurrentPosition } from '../lib/geo';
 import type { Session } from '../types/auth';
 
 type Location = {
@@ -23,6 +25,7 @@ export const LocationsView = ({ session, onBack }: { session: Session; onBack: (
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [findingPosition, setFindingPosition] = useState(false);
 
   const request = async (path: string, options?: RequestInit) => {
     const response = await fetch(`${API_URL}/api/admin${path}`, {
@@ -83,6 +86,33 @@ export const LocationsView = ({ session, onBack }: { session: Session; onBack: (
     }
   };
 
+  const useCurrentLocation = async () => {
+    setFindingPosition(true);
+    setError('');
+    const position = await getCurrentPosition();
+    setFindingPosition(false);
+
+    if (!position) {
+      setError('No se pudo obtener la ubicacion. Activa el GPS y concede permiso a la aplicacion.');
+      return;
+    }
+
+    setForm((current) => ({
+      ...current,
+      latitud: position.coords.latitude.toFixed(8),
+      longitud: position.coords.longitude.toFixed(8),
+    }));
+  };
+
+  const selectMapPosition = (latitude: number, longitude: number, address?: string) => {
+    setForm((current) => ({
+      ...current,
+      descripcion: current.descripcion || address || '',
+      latitud: latitude.toFixed(8),
+      longitud: longitude.toFixed(8),
+    }));
+  };
+
   return (
     <div className="space-y-8 pb-32">
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
@@ -126,7 +156,7 @@ export const LocationsView = ({ session, onBack }: { session: Session; onBack: (
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/30 p-5 backdrop-blur-sm">
-          <form onSubmit={createLocation} className="w-full max-w-lg rounded-3xl bg-surface-container-lowest p-7 shadow-2xl">
+          <form onSubmit={createLocation} className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-surface-container-lowest p-7 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
               <div><h3 className="font-headline text-2xl font-bold text-primary">Nueva locacion</h3><p className="text-sm text-on-surface-variant">Define su zona autorizada.</p></div>
               <button type="button" onClick={() => setShowForm(false)} className="rounded-full bg-surface-container-low p-2"><X size={18} /></button>
@@ -134,6 +164,14 @@ export const LocationsView = ({ session, onBack }: { session: Session; onBack: (
             <div className="grid gap-4">
               <input required placeholder="Nombre" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
               <textarea placeholder="Descripcion (opcional)" value={form.descripcion} onChange={(e) => setForm({ ...form, descripcion: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-4">
+                <div className="mb-3 flex justify-end">
+                  <button type="button" disabled={findingPosition} onClick={() => void useCurrentLocation()} className="flex items-center justify-center gap-2 rounded-full bg-tertiary px-5 py-3 text-xs font-bold text-white disabled:opacity-60">
+                    {findingPosition ? <LoaderCircle size={16} className="animate-spin" /> : <Crosshair size={16} />} Mi ubicacion
+                  </button>
+                </div>
+                <GoogleLocationPicker latitude={form.latitud} longitude={form.longitud} onChange={selectMapPosition} />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <input required type="number" step="any" min="-90" max="90" placeholder="Latitud" value={form.latitud} onChange={(e) => setForm({ ...form, latitud: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
                 <input required type="number" step="any" min="-180" max="180" placeholder="Longitud" value={form.longitud} onChange={(e) => setForm({ ...form, longitud: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
