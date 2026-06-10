@@ -55,6 +55,24 @@ CREATE TABLE IF NOT EXISTS usuarios_locaciones (
   UNIQUE KEY uq_usuario_locacion (usuario_id, locacion_id)
 );
 
+CREATE TABLE IF NOT EXISTS asignaciones (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  usuario_id INT NOT NULL,
+  locacion_id INT NOT NULL,
+  turno_id INT NOT NULL,
+  fecha_inicio DATE NOT NULL,
+  fecha_fin DATE NULL,
+  dias_semana JSON NOT NULL,
+  activa BOOLEAN NOT NULL DEFAULT TRUE,
+  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
+  FOREIGN KEY (locacion_id) REFERENCES locaciones(id),
+  FOREIGN KEY (turno_id) REFERENCES turnos(id),
+  INDEX idx_asignaciones_usuario (usuario_id),
+  INDEX idx_asignaciones_locacion (locacion_id),
+  INDEX idx_asignaciones_vigencia (fecha_inicio, fecha_fin)
+);
+
 CREATE TABLE IF NOT EXISTS asistencias (
   id INT AUTO_INCREMENT PRIMARY KEY,
   usuario_id INT NOT NULL,

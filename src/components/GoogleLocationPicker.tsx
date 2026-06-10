@@ -5,6 +5,7 @@ declare global {
   interface Window {
     google?: any;
     initWorkforceGoogleMap?: () => void;
+    gm_authFailure?: () => void;
   }
 }
 
@@ -85,6 +86,10 @@ export const GoogleLocationPicker = ({ latitude, longitude, onChange }: Props) =
     }
 
     window.initWorkforceGoogleMap = initializeMap;
+    window.gm_authFailure = () => {
+      setError('Google Maps rechazo la clave. Habilita facturacion, Maps JavaScript API y Places API, y revisa las restricciones de la clave.');
+      setLoading(false);
+    };
     const existingScript = document.querySelector<HTMLScriptElement>('script[data-workforce-google-maps]');
     if (existingScript) return;
 

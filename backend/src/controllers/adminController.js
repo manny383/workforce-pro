@@ -161,3 +161,116 @@ export const updateLocationStatus = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar locacion' });
   }
 };
+
+export const getShifts = async (req, res) => {
+  try {
+    const [shifts] = await pool.query(
+      `SELECT id, nombre_turno, hora_entrada, hora_salida, tolerancia_minutos
+       FROM turnos
+       ORDER BY hora_entrada ASC`
+    );
+    res.json(shifts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al consultar turnos' });
+  }
+};
+
+export const getUserAssignments = async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) {
+      return res.status(400).json({ message: 'Usuario invalido' });
+    }
+
+    const [assignments] = await pool.query(
+      `SELECT
+         a.id, a.usuario_id, a.locacion_id, a.turno_id, a.fecha_inicio,
+         a.fecha_fin, a.dias_semana, a.activa, a.fecha_creacion,
+         l.nombre AS locacion_nombre,
+         t.nombre_turno, t.hora_entrada, t.hora_salida, t.tolerancia_minutos
+       FROM asignaciones a
+       INNER JOIN locaciones l ON l.id = a.locacion_id
+       INNER JOIN turnos t ON t.id = a.turno_id
+       WHERE a.usuario_id = ?
+       ORDER BY a.activa DESC, a.fecha_inicio DESC, t.hora_entrada ASC`,
+      [userId]
+    );
+
+    res.json(assignments.map((assignment) => ({
+      ...assignment,
+      dias_semana: typeof assignment.dias_semana === 'string'
+        ? JSON.parse(assignment.dias_semana)
+        : assignment.dias_semana,
+    })));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al consultar horarios' });
+  }
+};
+
+export const createUserAssignment = async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const locationId = Number(req.body.locacion_id);
+    const shiftId = Number(req.body.turno_id);
+    const { fecha_inicio, fecha_fin = null, dias_semana } = req.body;
+
+    const validDays = Array.isArray(dias_semana)
+      && dias_semana.length > 0
+      && dias_semana.every((day) => Number.isInteger(day) && day >= 1 && day <= 7);
+
+    if (!Number.isInteger(userId) || !Number.isInteger(locationId) || !Number.isInteger(shiftId)
+      || !fecha_inicio || !validDays) {
+      return res.status(400).json({ message: 'Usuario, ubicacion, turno, fecha y dias validos son requeridos' });
+    }
+
+    if (fecha_fin && fecha_fin < fecha_inicio) {
+      return res.status(400).json({ message: 'La fecha final no puede ser anterior a la fecha inicial' });
+    }
+
+    const [references] = await pool.query(
+      `SELECT
+         EXISTS(SELECT 1 FROM usuarios WHERE id = ? AND activo = TRUE) AS usuario_valido,
+         EXISTS(SELECT 1 FROM locaciones WHERE id = ? AND activa = TRUE) AS locacion_valida,
+         EXISTS(SELECT 1 FROM turnos WHERE id = ?) AS turno_valido`,
+      [userId, locationId, shiftId]
+    );
+    const reference = references[0];
+    if (!reference.usuario_valido || !reference.locacion_valida || !reference.turno_valido) {
+      return res.status(400).json({ message: 'El usuario, la ubicacion o el turno no estan disponibles' });
+    }
+
+    const normalizedDays = [...new Set(dias_semana)].sort((a, b) => a - b);
+    const [result] = await pool.query(
+      `INSERT INTO asignaciones
+         (usuario_id, locacion_id, turno_id, fecha_inicio, fecha_fin, dias_semana)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, locationId, shiftId, fecha_inicio, fecha_fin || null, JSON.stringify(normalizedDays)]
+    );
+
+    res.status(201).json({ id: result.insertId, message: 'Horario asignado' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al asignar horario' });
+  }
+};
+
+export const updateAssignmentStatus = async (req, res) => {
+  try {
+    const assignmentId = Number(req.params.id);
+    const { activa } = req.body;
+    if (!Number.isInteger(assignmentId) || typeof activa !== 'boolean') {
+      return res.status(400).json({ message: 'Datos invalidos' });
+    }
+
+    const [result] = await pool.query('UPDATE asignaciones SET activa = ? WHERE id = ?', [activa, assignmentId]);
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: 'Horario no encontrado' });
+    }
+    res.json({ message: activa ? 'Horario activado' : 'Horario desactivado' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar horario' });
+  }
+};

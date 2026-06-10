@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, LoaderCircle, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
+import { ArrowLeft, CalendarClock, LoaderCircle, MapPin, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
 import { API_URL } from '../config/api';
 import type { ApiUser, Session } from '../types/auth';
 
@@ -9,6 +9,18 @@ type ManagedUser = ApiUser & {
 };
 
 const emptyForm = { nombre: '', correo: '', password: '', telefono: '', rol: 'empleado' as ApiUser['rol'] };
+const dayOptions = [
+  { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mie' },
+  { value: 4, label: 'Jue' }, { value: 5, label: 'Vie' }, { value: 6, label: 'Sab' },
+  { value: 7, label: 'Dom' },
+];
+type Shift = { id: number; nombre_turno: string; hora_entrada: string; hora_salida: string };
+type Location = { id: number; nombre: string; activa: number | boolean };
+type Assignment = {
+  id: number; locacion_nombre: string; nombre_turno: string; hora_entrada: string; hora_salida: string;
+  fecha_inicio: string; fecha_fin: string | null; dias_semana: number[]; activa: number | boolean;
+};
+const emptyAssignment = { locacion_id: '', turno_id: '', fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '', dias_semana: [1, 2, 3, 4, 5] };
 
 export const TeamView = ({ session, onBack }: { session: Session; onBack: () => void }) => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -18,6 +30,12 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [scheduleUser, setScheduleUser] = useState<ManagedUser | null>(null);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [assignmentForm, setAssignmentForm] = useState(emptyAssignment);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
 
   const request = async (path: string, options?: RequestInit) => {
     const response = await fetch(`${API_URL}/api/admin${path}`, {
@@ -94,6 +112,60 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
     }
   };
 
+  const openSchedule = async (user: ManagedUser) => {
+    try {
+      setScheduleUser(user);
+      setScheduleLoading(true);
+      setError('');
+      const [nextAssignments, nextLocations, nextShifts] = await Promise.all([
+        request(`/users/${user.id}/assignments`), request('/locations'), request('/shifts'),
+      ]);
+      setAssignments(nextAssignments);
+      setLocations(nextLocations.filter((location: Location) => Boolean(location.activa)));
+      setShifts(nextShifts);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron cargar los horarios');
+      setScheduleUser(null);
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  const createAssignment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!scheduleUser) return;
+    try {
+      setSaving(true);
+      setError('');
+      await request(`/users/${scheduleUser.id}/assignments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...assignmentForm,
+          locacion_id: Number(assignmentForm.locacion_id),
+          turno_id: Number(assignmentForm.turno_id),
+          fecha_fin: assignmentForm.fecha_fin || null,
+        }),
+      });
+      setAssignments(await request(`/users/${scheduleUser.id}/assignments`));
+      setAssignmentForm(emptyAssignment);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo asignar el horario');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleAssignment = async (assignment: Assignment) => {
+    if (!scheduleUser) return;
+    try {
+      const activa = !Boolean(assignment.activa);
+      await request(`/assignments/${assignment.id}/status`, { method: 'PATCH', body: JSON.stringify({ activa }) });
+      setAssignments((current) => current.map((item) => item.id === assignment.id ? { ...item, activa } : item));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el horario');
+    }
+  };
+
   return (
     <div className="space-y-8 pb-32">
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
@@ -139,6 +211,9 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
                   {user.activo ? <UserX size={15} /> : <UserCheck size={15} />} {user.activo ? 'Desactivar' : 'Activar'}
                 </button>
               </div>
+              <button onClick={() => void openSchedule(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary/10 py-3 text-xs font-bold text-primary">
+                <CalendarClock size={16} /> Administrar horarios
+              </button>
             </article>
           ))}
         </div>
@@ -166,6 +241,57 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {scheduleUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/30 p-5 backdrop-blur-sm">
+          <div className="max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-surface-container-lowest p-7 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <div><h3 className="font-headline text-2xl font-bold text-primary">Horarios de {scheduleUser.nombre}</h3><p className="text-sm text-on-surface-variant">Asigna turnos por ubicacion y dias.</p></div>
+              <button onClick={() => setScheduleUser(null)} className="rounded-full bg-surface-container-low p-2"><X size={18} /></button>
+            </div>
+
+            {scheduleLoading ? <div className="flex justify-center py-16"><LoaderCircle className="animate-spin text-primary" /></div> : (
+              <div className="grid gap-7 lg:grid-cols-2">
+                <form onSubmit={createAssignment} className="grid content-start gap-4 rounded-2xl bg-surface-container-low p-5">
+                  <h4 className="font-headline text-lg font-bold text-primary">Nueva asignacion</h4>
+                  <select required value={assignmentForm.locacion_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, locacion_id: e.target.value })} className="rounded-xl bg-surface-container-lowest p-4 text-sm outline-primary">
+                    <option value="">Selecciona ubicacion</option>
+                    {locations.map((location) => <option key={location.id} value={location.id}>{location.nombre}</option>)}
+                  </select>
+                  <select required value={assignmentForm.turno_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, turno_id: e.target.value })} className="rounded-xl bg-surface-container-lowest p-4 text-sm outline-primary">
+                    <option value="">Selecciona turno</option>
+                    {shifts.map((shift) => <option key={shift.id} value={shift.id}>{shift.nombre_turno} ({shift.hora_entrada.slice(0, 5)} - {shift.hora_salida.slice(0, 5)})</option>)}
+                  </select>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="text-xs font-bold text-on-surface-variant">Desde<input required type="date" value={assignmentForm.fecha_inicio} onChange={(e) => setAssignmentForm({ ...assignmentForm, fecha_inicio: e.target.value })} className="mt-2 w-full rounded-xl bg-surface-container-lowest p-3 text-sm" /></label>
+                    <label className="text-xs font-bold text-on-surface-variant">Hasta (opcional)<input type="date" min={assignmentForm.fecha_inicio} value={assignmentForm.fecha_fin} onChange={(e) => setAssignmentForm({ ...assignmentForm, fecha_fin: e.target.value })} className="mt-2 w-full rounded-xl bg-surface-container-lowest p-3 text-sm" /></label>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dayOptions.map((day) => <button key={day.value} type="button" onClick={() => setAssignmentForm((current) => ({ ...current, dias_semana: current.dias_semana.includes(day.value) ? current.dias_semana.filter((value) => value !== day.value) : [...current.dias_semana, day.value] }))} className={`rounded-full px-3 py-2 text-xs font-bold ${assignmentForm.dias_semana.includes(day.value) ? 'bg-primary text-white' : 'bg-surface-container-lowest text-on-surface-variant'}`}>{day.label}</button>)}
+                  </div>
+                  <button disabled={saving || assignmentForm.dias_semana.length === 0} className="flex items-center justify-center gap-2 rounded-full bg-primary py-3 font-bold text-white disabled:opacity-50">{saving && <LoaderCircle size={17} className="animate-spin" />} Asignar horario</button>
+                </form>
+
+                <div className="space-y-3">
+                  <h4 className="font-headline text-lg font-bold text-primary">Asignaciones</h4>
+                  {!assignments.length && <p className="rounded-2xl bg-surface-container-low p-5 text-sm text-on-surface-variant">Este trabajador aun no tiene horarios asignados.</p>}
+                  {assignments.map((assignment) => (
+                    <article key={assignment.id} className={`rounded-2xl border p-4 ${assignment.activa ? 'border-primary/20 bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low opacity-60'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="font-bold text-on-surface">{assignment.nombre_turno}</p><p className="mt-1 flex items-center gap-1 text-xs text-on-surface-variant"><MapPin size={13} /> {assignment.locacion_nombre}</p></div>
+                        <button onClick={() => void toggleAssignment(assignment)} className="rounded-full bg-surface-container-lowest px-3 py-2 text-[10px] font-bold uppercase text-primary">{assignment.activa ? 'Desactivar' : 'Activar'}</button>
+                      </div>
+                      <p className="mt-3 text-sm font-semibold text-primary">{assignment.hora_entrada.slice(0, 5)} - {assignment.hora_salida.slice(0, 5)}</p>
+                      <p className="mt-1 text-xs text-on-surface-variant">{assignment.dias_semana.map((day) => dayOptions.find((option) => option.value === day)?.label).join(', ')}</p>
+                      <p className="mt-1 text-xs text-on-surface-variant">Desde {String(assignment.fecha_inicio).slice(0, 10)}{assignment.fecha_fin ? ` hasta ${String(assignment.fecha_fin).slice(0, 10)}` : ', sin fecha final'}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

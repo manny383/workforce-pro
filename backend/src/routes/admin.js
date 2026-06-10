@@ -1,9 +1,13 @@
 import express from 'express';
 import {
   createLocation,
+  createUserAssignment,
   createUser,
   getLocations,
+  getShifts,
+  getUserAssignments,
   getUsers,
+  updateAssignmentStatus,
   updateLocationStatus,
   updateUserStatus,
 } from '../controllers/adminController.js';
@@ -18,5 +22,9 @@ router.patch('/users/:id/status', updateUserStatus);
 router.get('/locations', getLocations);
 router.post('/locations', createLocation);
 router.patch('/locations/:id/status', updateLocationStatus);
+router.get('/shifts', getShifts);
+router.get('/users/:id/assignments', getUserAssignments);
+router.post('/users/:id/assignments', createUserAssignment);
+router.patch('/assignments/:id/status', updateAssignmentStatus);
 
 export default router;

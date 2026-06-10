@@ -94,7 +94,7 @@ function AppRoutes() {
       throw new Error('Inicia sesion de nuevo');
     }
 
-    const position = await getCurrentPosition();
+    const position = await getCurrentPosition().catch(() => null);
     const response = await fetch(`${API_URL}/api/attendance/clock-in`, {
       method: 'POST',
       headers: {
@@ -123,7 +123,7 @@ function AppRoutes() {
       return;
     }
 
-    const position = await getCurrentPosition();
+    const position = await getCurrentPosition().catch(() => null);
     const response = await fetch(`${API_URL}/api/attendance/clock-out`, {
       method: 'POST',
       headers: {

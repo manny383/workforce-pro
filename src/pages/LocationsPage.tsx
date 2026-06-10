@@ -87,21 +87,20 @@ export const LocationsView = ({ session, onBack }: { session: Session; onBack: (
   };
 
   const useCurrentLocation = async () => {
-    setFindingPosition(true);
-    setError('');
-    const position = await getCurrentPosition();
-    setFindingPosition(false);
-
-    if (!position) {
-      setError('No se pudo obtener la ubicacion. Activa el GPS y concede permiso a la aplicacion.');
-      return;
+    try {
+      setFindingPosition(true);
+      setError('');
+      const position = await getCurrentPosition();
+      setForm((current) => ({
+        ...current,
+        latitud: position.coords.latitude.toFixed(8),
+        longitud: position.coords.longitude.toFixed(8),
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo obtener la ubicacion');
+    } finally {
+      setFindingPosition(false);
     }
-
-    setForm((current) => ({
-      ...current,
-      latitud: position.coords.latitude.toFixed(8),
-      longitud: position.coords.longitude.toFixed(8),
-    }));
   };
 
   const selectMapPosition = (latitude: number, longitude: number, address?: string) => {
