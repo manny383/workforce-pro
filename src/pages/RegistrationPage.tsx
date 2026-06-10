@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Camera, CheckCircle2, Fingerprint, LoaderCircle, MapPin, ShieldCheck, User } from 'lucide-react';
-import { API_URL } from '../config/api';
+import { API_URL, readApiResponse } from '../config/api';
 import type { Session } from '../types/auth';
 
 type TodayAssignment = {
@@ -19,9 +19,8 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
 
   useEffect(() => {
     fetch(`${API_URL}/api/attendance/today-assignments`, { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(async (response) => {
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'No se pudieron consultar tus horarios');
+      .then(readApiResponse)
+      .then((data) => {
         setAssignments(data);
         setSelectedLocationId(data[0]?.locacion_id ?? null);
       })

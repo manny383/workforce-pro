@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Bell, Clock, LoaderCircle, LogOut, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { API_URL } from '../config/api';
+import { API_URL, readApiResponse } from '../config/api';
 import type { Session, View } from '../types/auth';
 
 type DashboardData = {
@@ -19,7 +19,8 @@ export const DashboardView = ({ session, onAction, onClockOut }: { session: Sess
   const [error, setError] = useState('');
   useEffect(() => {
     fetch(`${API_URL}/api/attendance/dashboard`, { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.message); setData(body); })
+      .then(readApiResponse)
+      .then(setData)
       .catch((err) => setError(err.message || 'No se pudo cargar el dashboard'));
   }, [session.token]);
 

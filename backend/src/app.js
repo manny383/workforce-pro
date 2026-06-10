@@ -31,6 +31,10 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
+app.use('/api', (req, res) => {
+  res.status(404).json({ message: `Ruta API no encontrada: ${req.method} ${req.originalUrl}` });
+});
+
 // Middleware de errores
 app.use((err, req, res, next) => {
   console.error(err.stack);

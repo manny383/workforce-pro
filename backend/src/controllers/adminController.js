@@ -295,12 +295,24 @@ export const getManagerDashboard = async (req, res) => {
     );
     const [alerts] = await pool.query(
       `SELECT u.nombre, l.nombre AS locacion_nombre, a.entrada,
-              TIMESTAMPDIFF(MINUTE, TIMESTAMP(DATE(a.entrada), t.hora_entrada), a.entrada) AS minutos_retardo
+              GREATEST(0, TIMESTAMPDIFF(
+                MINUTE,
+                TIMESTAMP(DATE(a.entrada), COALESCE((
+                  SELECT t.hora_entrada
+                  FROM asignaciones ag
+                  INNER JOIN turnos t ON t.id = ag.turno_id
+                  WHERE ag.usuario_id = a.usuario_id
+                    AND ag.locacion_id = a.locacion_id
+                    AND ag.activa = TRUE
+                    AND DATE(a.entrada) BETWEEN ag.fecha_inicio AND COALESCE(ag.fecha_fin, '9999-12-31')
+                  ORDER BY ag.fecha_inicio DESC
+                  LIMIT 1
+                ), TIME(a.entrada))),
+                a.entrada
+              )) AS minutos_retardo
        FROM asistencias a
        INNER JOIN usuarios u ON u.id = a.usuario_id
        LEFT JOIN locaciones l ON l.id = a.locacion_id
-       LEFT JOIN asignaciones ag ON ag.id = a.asignacion_id
-       LEFT JOIN turnos t ON t.id = ag.turno_id
        WHERE DATE(a.entrada) = CURDATE() AND a.estatus = 'retardo'
        ORDER BY a.entrada DESC LIMIT 5`
     );
@@ -318,6 +330,10 @@ export const getManagerDashboard = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al cargar el dashboard administrativo' });
+    res.status(500).json({
+      message: process.env.NODE_ENV === 'production'
+        ? 'Error al cargar el dashboard administrativo'
+        : `Error al cargar el dashboard administrativo: ${error.message}`,
+    });
   }
 };

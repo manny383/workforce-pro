@@ -260,7 +260,12 @@ export const getEmployeeDashboard = async (req, res) => {
        WHERE a.usuario_id = ? ORDER BY a.entrada DESC LIMIT 3`,
       [userId]
     );
-    const [assignments] = await pool.query(`${todayAssignmentsQuery} ORDER BY t.hora_entrada ASC`, [userId]);
+    let assignments = [];
+    try {
+      [assignments] = await pool.query(`${todayAssignmentsQuery} ORDER BY t.hora_entrada ASC`, [userId]);
+    } catch (assignmentError) {
+      console.error('No se pudieron cargar asignaciones del dashboard:', assignmentError);
+    }
     const latestAttendance = statusRows[0] || null;
 
     res.json({
@@ -272,6 +277,10 @@ export const getEmployeeDashboard = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Error al cargar el dashboard' });
+    res.status(500).json({
+      message: process.env.NODE_ENV === 'production'
+        ? 'Error al cargar el dashboard'
+        : `Error al cargar el dashboard: ${error.message}`,
+    });
   }
 };

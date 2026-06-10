@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertCircle, BadgeCheck, Clock, History as HistoryIcon, LoaderCircle, MapPin, User } from 'lucide-react';
-import { API_URL } from '../config/api';
+import { API_URL, readApiResponse } from '../config/api';
 import type { Session, View } from '../types/auth';
 
 type ManagerData = {
@@ -15,7 +15,8 @@ export const ManagerDashboardView = ({ session, onAction }: { session: Session; 
   const [error, setError] = useState('');
   useEffect(() => {
     fetch(`${API_URL}/api/admin/dashboard`, { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(async (response) => { const body = await response.json(); if (!response.ok) throw new Error(body.message); setData(body); })
+      .then(readApiResponse)
+      .then(setData)
       .catch((err) => setError(err.message || 'No se pudo cargar el dashboard'));
   }, [session.token]);
   if (!data && !error) return <div className="flex justify-center py-24"><LoaderCircle className="animate-spin text-primary" /></div>;
