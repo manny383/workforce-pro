@@ -1,18 +1,43 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Camera, CheckCircle2, Fingerprint, MapPin, ShieldCheck, User } from 'lucide-react';
+import { ArrowRight, Camera, CheckCircle2, Fingerprint, LoaderCircle, MapPin, ShieldCheck, User } from 'lucide-react';
+import { API_URL } from '../config/api';
+import type { Session } from '../types/auth';
 
-export const RegistrationView = ({ onComplete }: { onComplete: () => Promise<void> }) => {
+type TodayAssignment = {
+  asignacion_id: number; locacion_id: number; locacion_nombre: string; nombre_turno: string;
+  hora_entrada: string; hora_salida: string;
+};
+
+export const RegistrationView = ({ session, onComplete }: { session: Session; onComplete: (locationId: number) => Promise<void> }) => {
   const [showBioDetails, setShowBioDetails] = useState(false);
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [assignments, setAssignments] = useState<TodayAssignment[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/attendance/today-assignments`, { headers: { Authorization: `Bearer ${session.token}` } })
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || 'No se pudieron consultar tus horarios');
+        setAssignments(data);
+        setSelectedLocationId(data[0]?.locacion_id ?? null);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron consultar tus horarios'))
+      .finally(() => setIsLoading(false));
+  }, [session.token]);
+
+  const selectedAssignment = assignments.find((assignment) => assignment.locacion_id === selectedLocationId);
 
   const handleConfirm = async () => {
     setError('');
     setIsSaving(true);
 
     try {
-      await onComplete();
+      if (!selectedLocationId) throw new Error('Selecciona una ubicacion asignada');
+      await onComplete(selectedLocationId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la asistencia');
     } finally {
@@ -23,11 +48,11 @@ export const RegistrationView = ({ onComplete }: { onComplete: () => Promise<voi
   return (
     <div className="mx-auto max-w-md space-y-8 pb-32">
       <section className="space-y-1 text-center">
-        <p className="font-sans text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Monday, Oct 23, 2023</p>
-        <h2 className="font-headline text-6xl font-extrabold tracking-tighter text-primary">08:42</h2>
+        <p className="font-sans text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{new Intl.DateTimeFormat('es', { dateStyle: 'full' }).format(new Date())}</p>
+        <h2 className="font-headline text-6xl font-extrabold tracking-tighter text-primary">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</h2>
         <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-tertiary/10 px-4 py-1.5 text-tertiary">
           <CheckCircle2 size={16} />
-          <span className="font-sans text-xs font-semibold uppercase tracking-wider">On Schedule</span>
+          <span className="font-sans text-xs font-semibold uppercase tracking-wider">{selectedAssignment ? `${selectedAssignment.hora_entrada.slice(0, 5)} - ${selectedAssignment.hora_salida.slice(0, 5)}` : 'Sin horario para hoy'}</span>
         </div>
       </section>
 
@@ -81,12 +106,25 @@ export const RegistrationView = ({ onComplete }: { onComplete: () => Promise<voi
               <MapPin className="text-tertiary" size={12} />
               <span className="text-[10px] font-extrabold text-tertiary uppercase tracking-wider">In Zone</span>
             </div>
-            <p className="truncate text-[9px] font-medium text-on-surface-variant">Corporate HQ - Sector 4</p>
+            <p className="truncate text-[9px] font-medium text-on-surface-variant">{selectedAssignment?.locacion_nombre || 'Sin ubicacion asignada'}</p>
           </div>
         </div>
       </div>
 
-      <div className="space-y-4 pt-4">
+      <div className="space-y-4 pt-4">
+
+        {isLoading ? (
+          <div className="flex justify-center rounded-2xl bg-surface-container-low p-5"><LoaderCircle className="animate-spin text-primary" /></div>
+        ) : assignments.length > 0 ? (
+          <label className="block rounded-2xl bg-surface-container-low p-4 text-xs font-bold text-on-surface-variant">
+            Ubicacion y turno de hoy
+            <select value={selectedLocationId ?? ''} onChange={(event) => setSelectedLocationId(Number(event.target.value))} className="mt-2 w-full rounded-xl bg-surface-container-lowest p-4 text-sm font-semibold text-on-surface outline-primary">
+              {assignments.map((assignment) => <option key={assignment.asignacion_id} value={assignment.locacion_id}>{assignment.locacion_nombre} - {assignment.nombre_turno} ({assignment.hora_entrada.slice(0, 5)} a {assignment.hora_salida.slice(0, 5)})</option>)}
+            </select>
+          </label>
+        ) : (
+          <div className="rounded-xl bg-error/10 px-4 py-3 text-sm font-semibold text-error">No tienes horarios asignados para hoy.</div>
+        )}
         {error && (
           <div className="rounded-xl bg-error/10 px-4 py-3 text-sm font-semibold text-error">
             {error}
@@ -95,11 +133,11 @@ export const RegistrationView = ({ onComplete }: { onComplete: () => Promise<voi
 
         <button 
           onClick={handleConfirm}
-          disabled={isSaving}
+          disabled={isSaving || isLoading || !selectedLocationId}
           className="flex h-[64px] w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-primary to-primary-container shadow-xl transition-all active:scale-95"
         >
           <span className="font-headline text-lg font-bold tracking-wide text-on-primary">
-            {isSaving ? 'Registering...' : 'Confirm Attendance'}
+            {isSaving ? 'Registrando...' : 'Confirmar entrada'}
           </span>
           <ArrowRight className="text-on-primary" size={20} />
         </button>

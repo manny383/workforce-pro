@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS asistencias (
   id INT AUTO_INCREMENT PRIMARY KEY,
   usuario_id INT NOT NULL,
   locacion_id INT,
+  asignacion_id INT,
   entrada DATETIME,
   salida DATETIME,
   estatus ENUM('presente', 'retardo', 'ausente') DEFAULT 'presente',
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS asistencias (
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE,
   FOREIGN KEY (locacion_id) REFERENCES locaciones(id),
+  FOREIGN KEY (asignacion_id) REFERENCES asignaciones(id),
   INDEX idx_asistencias_usuario_id (usuario_id),
   INDEX idx_asistencias_entrada (entrada)
 );

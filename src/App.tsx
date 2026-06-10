@@ -88,13 +88,13 @@ function AppRoutes() {
     navigate(getViewPath(nextView, userType));
   };
 
-  const handleClockIn = async () => {
+  const handleClockIn = async (locationId: number) => {
     if (!session) {
       navigate('/login', { replace: true });
       throw new Error('Inicia sesion de nuevo');
     }
 
-    const position = await getCurrentPosition().catch(() => null);
+    const position = await getCurrentPosition();
     const response = await fetch(`${API_URL}/api/attendance/clock-in`, {
       method: 'POST',
       headers: {
@@ -102,9 +102,9 @@ function AppRoutes() {
         Authorization: `Bearer ${session.token}`,
       },
       body: JSON.stringify({
-        locacion_id: 1,
-        latitud: position?.coords.latitude ?? 19.7,
-        longitud: position?.coords.longitude ?? -101.184,
+        locacion_id: locationId,
+        latitud: position.coords.latitude,
+        longitud: position.coords.longitude,
       }),
     });
 
@@ -123,7 +123,7 @@ function AppRoutes() {
       return;
     }
 
-    const position = await getCurrentPosition().catch(() => null);
+    const position = await getCurrentPosition();
     const response = await fetch(`${API_URL}/api/attendance/clock-out`, {
       method: 'POST',
       headers: {
@@ -131,8 +131,8 @@ function AppRoutes() {
         Authorization: `Bearer ${session.token}`,
       },
       body: JSON.stringify({
-        latitud: position?.coords.latitude ?? 19.7,
-        longitud: position?.coords.longitude ?? -101.184,
+        latitud: position.coords.latitude,
+        longitud: position.coords.longitude,
       }),
     });
 
@@ -187,7 +187,7 @@ function AppRoutes() {
                 path="/registration"
                 element={(
                   <ProtectedRoute session={session} allowedRoles={['empleado']}>
-                    <RegistrationView onComplete={handleClockIn} />
+                    {session && <RegistrationView session={session} onComplete={handleClockIn} />}
                   </ProtectedRoute>
                 )}
               />
