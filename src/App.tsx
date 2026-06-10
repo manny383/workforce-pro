@@ -171,7 +171,7 @@ function AppRoutes() {
                 path="/dashboard"
                 element={(
                   <ProtectedRoute session={session} allowedRoles={['empleado']}>
-                    <DashboardView onAction={handleViewChange} onClockOut={handleClockOut} />
+                    {session && <DashboardView session={session} onAction={handleViewChange} onClockOut={handleClockOut} />}
                   </ProtectedRoute>
                 )}
               />
@@ -179,7 +179,7 @@ function AppRoutes() {
                 path="/manager"
                 element={(
                   <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
-                    <ManagerDashboardView onAction={handleViewChange} />
+                    {session && <ManagerDashboardView session={session} onAction={handleViewChange} />}
                   </ProtectedRoute>
                 )}
               />

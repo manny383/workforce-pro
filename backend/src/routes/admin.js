@@ -4,6 +4,7 @@ import {
   createUserAssignment,
   createUser,
   getLocations,
+  getManagerDashboard,
   getShifts,
   getUserAssignments,
   getUsers,
@@ -16,6 +17,7 @@ import { requireRoles, verifyToken } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.use(verifyToken, requireRoles(['admin', 'supervisor']));
+router.get('/dashboard', getManagerDashboard);
 router.get('/users', getUsers);
 router.post('/users', createUser);
 router.patch('/users/:id/status', updateUserStatus);

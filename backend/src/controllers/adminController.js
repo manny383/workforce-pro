@@ -274,3 +274,50 @@ export const updateAssignmentStatus = async (req, res) => {
     res.status(500).json({ message: 'Error al actualizar horario' });
   }
 };
+
+export const getManagerDashboard = async (req, res) => {
+  try {
+    const [summaryRows] = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM usuarios WHERE activo = TRUE AND rol = 'empleado') AS empleados,
+         (SELECT COUNT(*) FROM locaciones WHERE activa = TRUE) AS locaciones,
+         (SELECT COUNT(*) FROM asistencias WHERE salida IS NULL) AS activos,
+         (SELECT COUNT(*) FROM asistencias WHERE DATE(entrada) = CURDATE() AND estatus = 'retardo') AS retardos,
+         (SELECT COUNT(DISTINCT usuario_id) FROM asignaciones
+          WHERE activa = TRUE AND CURDATE() BETWEEN fecha_inicio AND COALESCE(fecha_fin, '9999-12-31')
+          AND JSON_CONTAINS(dias_semana, CAST(WEEKDAY(CURDATE()) + 1 AS JSON), '$')) AS programados,
+         (SELECT COUNT(DISTINCT usuario_id) FROM asistencias WHERE DATE(entrada) = CURDATE()) AS presentes`
+    );
+    const [weekly] = await pool.query(
+      `SELECT DATE(entrada) AS fecha, COUNT(DISTINCT usuario_id) AS presentes
+       FROM asistencias WHERE entrada >= CURDATE() - INTERVAL 6 DAY
+       GROUP BY DATE(entrada) ORDER BY fecha ASC`
+    );
+    const [alerts] = await pool.query(
+      `SELECT u.nombre, l.nombre AS locacion_nombre, a.entrada,
+              TIMESTAMPDIFF(MINUTE, TIMESTAMP(DATE(a.entrada), t.hora_entrada), a.entrada) AS minutos_retardo
+       FROM asistencias a
+       INNER JOIN usuarios u ON u.id = a.usuario_id
+       LEFT JOIN locaciones l ON l.id = a.locacion_id
+       LEFT JOIN asignaciones ag ON ag.id = a.asignacion_id
+       LEFT JOIN turnos t ON t.id = ag.turno_id
+       WHERE DATE(a.entrada) = CURDATE() AND a.estatus = 'retardo'
+       ORDER BY a.entrada DESC LIMIT 5`
+    );
+    const [locations] = await pool.query(
+      `SELECT l.id, l.nombre, COUNT(a.id) AS activos
+       FROM locaciones l LEFT JOIN asistencias a ON a.locacion_id = l.id AND a.salida IS NULL
+       WHERE l.activa = TRUE GROUP BY l.id, l.nombre ORDER BY activos DESC, l.nombre ASC LIMIT 5`
+    );
+    const summary = summaryRows[0];
+    res.json({
+      summary: { ...summary, ausentes: Math.max(0, Number(summary.programados) - Number(summary.presentes)) },
+      weekly,
+      alerts,
+      locations,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al cargar el dashboard administrativo' });
+  }
+};

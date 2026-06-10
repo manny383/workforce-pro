@@ -237,3 +237,41 @@ export const getAttendanceStatus = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener estado de asistencia' });
   }
 };
+
+export const getEmployeeDashboard = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [statusRows] = await pool.query(
+      `SELECT a.id, a.entrada, a.salida, a.estatus, l.nombre AS locacion_nombre,
+              TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos
+       FROM asistencias a LEFT JOIN locaciones l ON l.id = a.locacion_id
+       WHERE a.usuario_id = ? ORDER BY a.entrada DESC LIMIT 1`,
+      [userId]
+    );
+    const [todayRows] = await pool.query(
+      `SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, entrada, COALESCE(salida, NOW()))), 0) AS minutos
+       FROM asistencias WHERE usuario_id = ? AND DATE(entrada) = CURDATE()`,
+      [userId]
+    );
+    const [recent] = await pool.query(
+      `SELECT a.id, a.entrada, a.salida, a.estatus, COALESCE(l.nombre, 'Sin ubicacion') AS locacion_nombre,
+              TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos
+       FROM asistencias a LEFT JOIN locaciones l ON l.id = a.locacion_id
+       WHERE a.usuario_id = ? ORDER BY a.entrada DESC LIMIT 3`,
+      [userId]
+    );
+    const [assignments] = await pool.query(`${todayAssignmentsQuery} ORDER BY t.hora_entrada ASC`, [userId]);
+    const latestAttendance = statusRows[0] || null;
+
+    res.json({
+      checkedIn: Boolean(latestAttendance && !latestAttendance.salida),
+      latestAttendance,
+      todayMinutes: Number(todayRows[0].minutos),
+      assignments,
+      recent,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al cargar el dashboard' });
+  }
+};
