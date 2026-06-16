@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS asistencias (
   entrada DATETIME,
   salida DATETIME,
   estatus ENUM('presente', 'retardo', 'ausente') DEFAULT 'presente',
+  origen ENUM('horario', 'manual') NOT NULL DEFAULT 'horario',
   latitud_entrada DECIMAL(10,8),
   longitud_entrada DECIMAL(11,8),
   latitud_salida DECIMAL(10,8),

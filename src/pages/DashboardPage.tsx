@@ -7,7 +7,7 @@ import type { Session, View } from '../types/auth';
 type DashboardData = {
   checkedIn: boolean;
   todayMinutes: number;
-  latestAttendance: null | { entrada: string; salida: string | null; estatus: string; locacion_nombre: string };
+  latestAttendance: null | { entrada: string; salida: string | null; estatus: string; origen: string; locacion_nombre: string };
   assignments: Array<{ asignacion_id: number; locacion_nombre: string; nombre_turno: string; hora_entrada: string; hora_salida: string }>;
   recent: Array<{ id: number; entrada: string; duracion_minutos: number; locacion_nombre: string }>;
 };
@@ -32,8 +32,8 @@ export const DashboardView = ({ session, onAction, onClockOut }: { session: Sess
 
   return <div className="space-y-8 pb-32">
     {!data.checkedIn && <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between gap-4 rounded-xl border border-primary/10 bg-primary-fixed-dim/20 p-4 shadow-sm">
-      <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10"><Bell className="text-primary" size={20} /></div><div><p className="font-headline text-sm font-bold text-primary">Registra tu entrada</p><p className="text-xs text-on-surface-variant">{assignment ? `${assignment.locacion_nombre} - ${assignment.nombre_turno}` : 'No tienes horario asignado para hoy'}</p></div></div>
-      <button disabled={!assignment} onClick={() => onAction('registration')} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Entrada</button>
+      <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10"><Bell className="text-primary" size={20} /></div><div><p className="font-headline text-sm font-bold text-primary">Agrega tu asistencia</p><p className="text-xs text-on-surface-variant">{assignment ? `${assignment.locacion_nombre} - ${assignment.nombre_turno}` : 'Inicia el registro cuando estes listo'}</p></div></div>
+      <button onClick={() => onAction('registration')} className="rounded-full bg-primary px-4 py-2 text-xs font-bold text-white">Agregar</button>
     </motion.div>}
 
     <section className="space-y-4">
@@ -42,7 +42,7 @@ export const DashboardView = ({ session, onAction, onClockOut }: { session: Sess
     </section>
 
     <section className="grid gap-4 md:grid-cols-2">
-      <button disabled={data.checkedIn || !assignment} onClick={() => onAction('registration')} className="signature-gradient flex h-[160px] flex-col justify-between rounded-2xl p-6 text-left disabled:opacity-40"><Clock className="text-white" /><div><h3 className="font-headline text-2xl font-bold text-white">Registrar entrada</h3><p className="text-sm text-primary-fixed/80">{assignment ? `${assignment.hora_entrada.slice(0, 5)} - ${assignment.hora_salida.slice(0, 5)}` : 'Sin turno hoy'}</p></div></button>
+      <button disabled={data.checkedIn} onClick={() => onAction('registration')} className="signature-gradient flex h-[160px] flex-col justify-between rounded-2xl p-6 text-left disabled:opacity-40"><Clock className="text-white" /><div><h3 className="font-headline text-2xl font-bold text-white">Agregar asistencia</h3><p className="text-sm text-primary-fixed/80">{assignment ? `${assignment.hora_entrada.slice(0, 5)} - ${assignment.hora_salida.slice(0, 5)}` : 'Sin turno asignado'}</p></div></button>
       <button disabled={!data.checkedIn} onClick={onClockOut} className="flex h-[160px] flex-col justify-between rounded-2xl bg-surface-container-high p-6 text-left disabled:opacity-40"><LogOut /><div><h3 className="font-headline text-2xl font-bold">Registrar salida</h3><p className="text-sm text-on-surface-variant">{data.checkedIn ? data.latestAttendance?.locacion_nombre : 'No tienes una entrada abierta'}</p></div></button>
     </section>
 

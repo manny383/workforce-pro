@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { BottomNav } from './components/BottomNav';
 import { TopBar } from './components/TopBar';
-import { API_URL } from './config/api';
+import { API_URL, readApiResponse } from './config/api';
 import { getCurrentPosition } from './lib/geo';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './lib/sessionStorage';
 import { cn } from './lib/utils';
@@ -108,11 +108,7 @@ function AppRoutes() {
       }),
     });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'No se pudo registrar la entrada');
-    }
+    await readApiResponse(response);
 
     navigate('/dashboard');
   };
@@ -191,7 +187,7 @@ function AppRoutes() {
                   </ProtectedRoute>
                 )}
               />
-              <Route path="/history" element={<ProtectedRoute session={session}><HistoryView /></ProtectedRoute>} />
+              <Route path="/history" element={<ProtectedRoute session={session}>{session && <HistoryView session={session} />}</ProtectedRoute>} />
               <Route path="/settings" element={<ProtectedRoute session={session}><SettingsView /></ProtectedRoute>} />
               <Route
                 path="/locations"

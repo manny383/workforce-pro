@@ -42,6 +42,21 @@ export const getTodayAssignments = async (req, res) => {
   }
 };
 
+export const getClockInLocations = async (req, res) => {
+  try {
+    const [locations] = await pool.query(
+      `SELECT id, nombre, descripcion, latitud, longitud, radio_permitido
+       FROM locaciones
+       WHERE activa = TRUE
+       ORDER BY nombre ASC`
+    );
+    res.json(locations);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al consultar ubicaciones disponibles' });
+  }
+};
+
 export const clockIn = async (req, res) => {
   try {
     const locationId = Number(req.body.locacion_id);
@@ -66,27 +81,41 @@ export const clockIn = async (req, res) => {
       [userId, locationId]
     );
     const assignment = assignments[0];
-    if (!assignment) {
-      return res.status(403).json({ message: 'No tienes un horario vigente para esta ubicacion hoy' });
+    const [locationRows] = assignment
+      ? [[assignment]]
+      : await pool.query(
+        `SELECT id AS locacion_id, nombre AS locacion_nombre, latitud, longitud, radio_permitido
+         FROM locaciones
+         WHERE id = ? AND activa = TRUE
+         LIMIT 1`,
+        [locationId]
+      );
+    const location = locationRows[0];
+    if (!location) {
+      return res.status(403).json({ message: 'La ubicacion seleccionada no esta disponible' });
     }
 
     const distance = distanceInMeters(
       latitude,
       longitude,
-      Number(assignment.latitud),
-      Number(assignment.longitud)
+      Number(location.latitud),
+      Number(location.longitud)
     );
-    if (distance > Number(assignment.radio_permitido)) {
+    if (distance > Number(location.radio_permitido)) {
       return res.status(403).json({
-        message: `Estas fuera del area permitida por ${Math.ceil(distance - Number(assignment.radio_permitido))} metros`,
+        message: `Estas fuera del area permitida por ${Math.ceil(distance - Number(location.radio_permitido))} metros`,
       });
     }
 
-    const [statusRows] = await pool.query(
-      `SELECT IF(CURTIME() > ADDTIME(?, SEC_TO_TIME(? * 60)), 'retardo', 'presente') AS estatus`,
-      [assignment.hora_entrada, assignment.tolerancia_minutos]
-    );
-    const status = statusRows[0].estatus;
+    let status = 'presente';
+    const origin = assignment ? 'horario' : 'manual';
+    if (assignment) {
+      const [statusRows] = await pool.query(
+        `SELECT IF(CURTIME() > ADDTIME(?, SEC_TO_TIME(? * 60)), 'retardo', 'presente') AS estatus`,
+        [assignment.hora_entrada, assignment.tolerancia_minutos]
+      );
+      status = statusRows[0].estatus;
+    }
 
     const [result] = await pool.query(
       `INSERT INTO asistencias (
@@ -95,18 +124,20 @@ export const clockIn = async (req, res) => {
          asignacion_id,
          entrada,
          estatus,
+         origen,
          latitud_entrada,
          longitud_entrada,
          distancia_entrada
        )
-       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?)`,
-      [userId, locationId, assignment.asignacion_id, status, latitude, longitude, distance]
+       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?)`,
+      [userId, locationId, assignment?.asignacion_id ?? null, status, origin, latitude, longitude, distance]
     );
 
     res.json({
       message: status === 'retardo' ? 'Entrada registrada con retardo' : 'Entrada registrada',
       id: result.insertId,
       estatus: status,
+      origen: origin,
       distancia_entrada: Math.round(distance),
     });
   } catch (error) {
@@ -182,6 +213,7 @@ export const getAttendance = async (req, res) => {
          a.entrada,
          a.salida,
          a.estatus,
+         COALESCE(a.origen, IF(a.asignacion_id IS NULL, 'manual', 'horario')) AS origen,
          a.latitud_entrada,
          a.longitud_entrada,
          a.latitud_salida,
@@ -216,6 +248,7 @@ export const getAttendanceStatus = async (req, res) => {
          a.entrada,
          a.salida,
          a.estatus,
+         COALESCE(a.origen, IF(a.asignacion_id IS NULL, 'manual', 'horario')) AS origen,
          COALESCE(l.nombre, 'Sin ubicacion') AS locacion_nombre,
          TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos
        FROM asistencias a
@@ -242,7 +275,9 @@ export const getEmployeeDashboard = async (req, res) => {
   try {
     const userId = req.user.id;
     const [statusRows] = await pool.query(
-      `SELECT a.id, a.entrada, a.salida, a.estatus, l.nombre AS locacion_nombre,
+      `SELECT a.id, a.entrada, a.salida, a.estatus,
+              COALESCE(a.origen, IF(a.asignacion_id IS NULL, 'manual', 'horario')) AS origen,
+              l.nombre AS locacion_nombre,
               TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos
        FROM asistencias a LEFT JOIN locaciones l ON l.id = a.locacion_id
        WHERE a.usuario_id = ? ORDER BY a.entrada DESC LIMIT 1`,
@@ -254,7 +289,9 @@ export const getEmployeeDashboard = async (req, res) => {
       [userId]
     );
     const [recent] = await pool.query(
-      `SELECT a.id, a.entrada, a.salida, a.estatus, COALESCE(l.nombre, 'Sin ubicacion') AS locacion_nombre,
+      `SELECT a.id, a.entrada, a.salida, a.estatus,
+              COALESCE(a.origen, IF(a.asignacion_id IS NULL, 'manual', 'horario')) AS origen,
+              COALESCE(l.nombre, 'Sin ubicacion') AS locacion_nombre,
               TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos
        FROM asistencias a LEFT JOIN locaciones l ON l.id = a.locacion_id
        WHERE a.usuario_id = ? ORDER BY a.entrada DESC LIMIT 3`,

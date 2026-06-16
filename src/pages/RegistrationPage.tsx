@@ -8,6 +8,7 @@ type TodayAssignment = {
   asignacion_id: number; locacion_id: number; locacion_nombre: string; nombre_turno: string;
   hora_entrada: string; hora_salida: string;
 };
+type ClockInLocation = { id: number; nombre: string; descripcion: string | null };
 
 export const RegistrationView = ({ session, onComplete }: { session: Session; onComplete: (locationId: number) => Promise<void> }) => {
   const [showBioDetails, setShowBioDetails] = useState(false);
@@ -15,27 +16,32 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [assignments, setAssignments] = useState<TodayAssignment[]>([]);
+  const [locations, setLocations] = useState<ClockInLocation[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/attendance/today-assignments`, { headers: { Authorization: `Bearer ${session.token}` } })
-      .then(readApiResponse)
-      .then((data) => {
-        setAssignments(data);
-        setSelectedLocationId(data[0]?.locacion_id ?? null);
+    Promise.all([
+      fetch(`${API_URL}/api/attendance/today-assignments`, { headers: { Authorization: `Bearer ${session.token}` } }).then(readApiResponse),
+      fetch(`${API_URL}/api/attendance/locations`, { headers: { Authorization: `Bearer ${session.token}` } }).then(readApiResponse),
+    ])
+      .then(([assignmentData, locationData]) => {
+        setAssignments(assignmentData);
+        setLocations(locationData);
+        setSelectedLocationId(assignmentData[0]?.locacion_id ?? locationData[0]?.id ?? null);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron consultar tus horarios'))
+      .catch((err) => setError(err instanceof Error ? err.message : 'No se pudieron consultar las opciones de asistencia'))
       .finally(() => setIsLoading(false));
   }, [session.token]);
 
   const selectedAssignment = assignments.find((assignment) => assignment.locacion_id === selectedLocationId);
+  const selectedLocation = locations.find((location) => location.id === selectedLocationId);
 
   const handleConfirm = async () => {
     setError('');
     setIsSaving(true);
 
     try {
-      if (!selectedLocationId) throw new Error('Selecciona una ubicacion asignada');
+      if (!selectedLocationId) throw new Error('Selecciona una ubicacion');
       await onComplete(selectedLocationId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la asistencia');
@@ -51,7 +57,7 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
         <h2 className="font-headline text-6xl font-extrabold tracking-tighter text-primary">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</h2>
         <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-tertiary/10 px-4 py-1.5 text-tertiary">
           <CheckCircle2 size={16} />
-          <span className="font-sans text-xs font-semibold uppercase tracking-wider">{selectedAssignment ? `${selectedAssignment.hora_entrada.slice(0, 5)} - ${selectedAssignment.hora_salida.slice(0, 5)}` : 'Sin horario para hoy'}</span>
+          <span className="font-sans text-xs font-semibold uppercase tracking-wider">{selectedAssignment ? `${selectedAssignment.hora_entrada.slice(0, 5)} - ${selectedAssignment.hora_salida.slice(0, 5)}` : 'Registro manual'}</span>
         </div>
       </section>
 
@@ -105,7 +111,7 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
               <MapPin className="text-tertiary" size={12} />
               <span className="text-[10px] font-extrabold text-tertiary uppercase tracking-wider">In Zone</span>
             </div>
-            <p className="truncate text-[9px] font-medium text-on-surface-variant">{selectedAssignment?.locacion_nombre || 'Sin ubicacion asignada'}</p>
+            <p className="truncate text-[9px] font-medium text-on-surface-variant">{selectedAssignment?.locacion_nombre || selectedLocation?.nombre || 'Sin ubicacion seleccionada'}</p>
           </div>
         </div>
       </div>
@@ -114,15 +120,18 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
 
         {isLoading ? (
           <div className="flex justify-center rounded-2xl bg-surface-container-low p-5"><LoaderCircle className="animate-spin text-primary" /></div>
-        ) : assignments.length > 0 ? (
+        ) : locations.length > 0 ? (
           <label className="block rounded-2xl bg-surface-container-low p-4 text-xs font-bold text-on-surface-variant">
-            Ubicacion y turno de hoy
+            Ubicacion para asistencia
             <select value={selectedLocationId ?? ''} onChange={(event) => setSelectedLocationId(Number(event.target.value))} className="mt-2 w-full rounded-xl bg-surface-container-lowest p-4 text-sm font-semibold text-on-surface outline-primary">
-              {assignments.map((assignment) => <option key={assignment.asignacion_id} value={assignment.locacion_id}>{assignment.locacion_nombre} - {assignment.nombre_turno} ({assignment.hora_entrada.slice(0, 5)} a {assignment.hora_salida.slice(0, 5)})</option>)}
+              {locations.map((location) => {
+                const assignment = assignments.find((item) => item.locacion_id === location.id);
+                return <option key={location.id} value={location.id}>{assignment ? `${assignment.locacion_nombre} - ${assignment.nombre_turno} (${assignment.hora_entrada.slice(0, 5)} a ${assignment.hora_salida.slice(0, 5)})` : `${location.nombre} - Registro manual`}</option>;
+              })}
             </select>
           </label>
         ) : (
-          <div className="rounded-xl bg-error/10 px-4 py-3 text-sm font-semibold text-error">No tienes horarios asignados para hoy.</div>
+          <div className="rounded-xl bg-error/10 px-4 py-3 text-sm font-semibold text-error">No hay ubicaciones activas para registrar asistencia.</div>
         )}
         {error && (
           <div className="rounded-xl bg-error/10 px-4 py-3 text-sm font-semibold text-error">
@@ -136,12 +145,12 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
           className="flex h-[64px] w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-primary to-primary-container shadow-xl transition-all active:scale-95"
         >
           <span className="font-headline text-lg font-bold tracking-wide text-on-primary">
-            {isSaving ? 'Registrando...' : 'Confirmar entrada'}
+            {isSaving ? 'Registrando...' : 'Agregar asistencia'}
           </span>
           <ArrowRight className="text-on-primary" size={20} />
         </button>
         <p className="px-8 text-center text-[11px] font-medium leading-relaxed text-on-surface-variant">
-          By clicking confirm, you authorize the capture of your current GPS location and biometric data for payroll compliance.
+          Al agregar asistencia autorizas capturar tu ubicacion GPS actual para validar el registro.
         </p>
       </div>
 
