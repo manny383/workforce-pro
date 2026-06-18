@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, CalendarClock, LoaderCircle, MapPin, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
+import { ArrowLeft, CalendarClock, LoaderCircle, MapPin, Pencil, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
 import { API_URL } from '../config/api';
 import type { ApiUser, Session } from '../types/auth';
 
@@ -9,6 +9,13 @@ type ManagedUser = ApiUser & {
 };
 
 const emptyForm = { nombre: '', correo: '', password: '', telefono: '', rol: 'empleado' as ApiUser['rol'] };
+const userToForm = (user: ManagedUser) => ({
+  nombre: user.nombre,
+  correo: user.correo,
+  password: '',
+  telefono: user.telefono || '',
+  rol: user.rol,
+});
 const dayOptions = [
   { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mie' },
   { value: 4, label: 'Jue' }, { value: 5, label: 'Vie' }, { value: 6, label: 'Sab' },
@@ -28,6 +35,7 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [scheduleUser, setScheduleUser] = useState<ManagedUser | null>(null);
@@ -96,6 +104,41 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
       setShowForm(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el usuario');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditUser = (user: ManagedUser) => {
+    setError('');
+    setEditingUser(user);
+    setForm(userToForm(user));
+  };
+
+  const closeUserForm = () => {
+    setShowForm(false);
+    setEditingUser(null);
+    setForm(emptyForm);
+  };
+
+  const updateUser = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingUser) return;
+
+    try {
+      setSaving(true);
+      setError('');
+      const payload = {
+        ...form,
+        password: form.password.trim() ? form.password : undefined,
+      };
+      const updatedUser = await request(`/users/${editingUser.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      setUsers((current) => current
+        .map((user) => user.id === editingUser.id ? { ...user, ...updatedUser } : user)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre)));
+      closeUserForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el usuario');
     } finally {
       setSaving(false);
     }
@@ -176,7 +219,7 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
           <h2 className="font-headline text-4xl font-extrabold text-primary">Equipo</h2>
           <p className="mt-2 text-on-surface-variant">Administra perfiles y acceso al sistema.</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg">
+        <button onClick={() => { setForm(emptyForm); setShowForm(true); }} className="flex items-center justify-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-bold text-white shadow-lg">
           <Plus size={18} /> Nuevo usuario
         </button>
       </div>
@@ -214,22 +257,28 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
               <button onClick={() => void openSchedule(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary/10 py-3 text-xs font-bold text-primary">
                 <CalendarClock size={16} /> Administrar horarios
               </button>
+              <button onClick={() => openEditUser(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-low py-3 text-xs font-bold text-on-surface-variant">
+                <Pencil size={16} /> Editar datos
+              </button>
             </article>
           ))}
         </div>
       )}
 
-      {showForm && (
+      {(showForm || editingUser) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-primary/30 p-5 backdrop-blur-sm">
-          <form onSubmit={createUser} className="w-full max-w-lg rounded-3xl bg-surface-container-lowest p-7 shadow-2xl">
+          <form onSubmit={editingUser ? updateUser : createUser} className="w-full max-w-lg rounded-3xl bg-surface-container-lowest p-7 shadow-2xl">
             <div className="mb-6 flex items-center justify-between">
-              <div><h3 className="font-headline text-2xl font-bold text-primary">Nuevo usuario</h3><p className="text-sm text-on-surface-variant">Crea sus credenciales de acceso.</p></div>
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-full bg-surface-container-low p-2"><X size={18} /></button>
+              <div>
+                <h3 className="font-headline text-2xl font-bold text-primary">{editingUser ? 'Editar usuario' : 'Nuevo usuario'}</h3>
+                <p className="text-sm text-on-surface-variant">{editingUser ? 'Actualiza sus datos de acceso.' : 'Crea sus credenciales de acceso.'}</p>
+              </div>
+              <button type="button" onClick={closeUserForm} className="rounded-full bg-surface-container-low p-2"><X size={18} /></button>
             </div>
             <div className="grid gap-4">
               <input required placeholder="Nombre completo" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
               <input required type="email" placeholder="Correo" value={form.correo} onChange={(e) => setForm({ ...form, correo: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
-              <input required minLength={8} type="password" placeholder="Password (minimo 8 caracteres)" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
+              <input required={!editingUser} minLength={8} type="password" placeholder={editingUser ? 'Nuevo password (opcional)' : 'Password (minimo 8 caracteres)'} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
               <input placeholder="Telefono (opcional)" value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary" />
               <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value as ApiUser['rol'] })} className="rounded-xl bg-surface-container-low p-4 text-sm outline-primary">
                 <option value="empleado">Empleado</option>
@@ -237,7 +286,7 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
                 {session.user.rol === 'admin' && <option value="admin">Administrador</option>}
               </select>
               <button disabled={saving} className="mt-2 flex items-center justify-center gap-2 rounded-full bg-primary py-4 font-bold text-white disabled:opacity-60">
-                {saving && <LoaderCircle size={18} className="animate-spin" />} Crear usuario
+                {saving && <LoaderCircle size={18} className="animate-spin" />} {editingUser ? 'Guardar cambios' : 'Crear usuario'}
               </button>
             </div>
           </form>

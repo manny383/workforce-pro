@@ -10,6 +10,7 @@ import {
   getUsers,
   updateAssignmentStatus,
   updateLocationStatus,
+  updateUser,
   updateUserStatus,
 } from '../controllers/adminController.js';
 import { requireRoles, verifyToken } from '../middleware/authMiddleware.js';
@@ -20,6 +21,7 @@ router.use(verifyToken, requireRoles(['admin', 'supervisor']));
 router.get('/dashboard', getManagerDashboard);
 router.get('/users', getUsers);
 router.post('/users', createUser);
+router.patch('/users/:id', updateUser);
 router.patch('/users/:id/status', updateUserStatus);
 router.get('/locations', getLocations);
 router.post('/locations', createLocation);

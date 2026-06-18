@@ -59,6 +59,82 @@ export const createUser = async (req, res) => {
   }
 };
 
+export const updateUser = async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const { nombre, correo, telefono, rol, password = '' } = req.body;
+
+    if (!Number.isInteger(userId)) {
+      return res.status(400).json({ message: 'Usuario invalido' });
+    }
+
+    if (!nombre || !correo) {
+      return res.status(400).json({ message: 'Nombre y correo son requeridos' });
+    }
+
+    if (password && password.length < 8) {
+      return res.status(400).json({ message: 'El password debe tener al menos 8 caracteres' });
+    }
+
+    const [rows] = await pool.query('SELECT id, rol, activo FROM usuarios WHERE id = ? LIMIT 1', [userId]);
+    const target = rows[0];
+
+    if (!target) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    const nextRole = rol || target.rol;
+    if (!roles.includes(nextRole)) {
+      return res.status(400).json({ message: 'Rol invalido' });
+    }
+
+    if (req.user.rol !== 'admin' && (target.rol !== 'empleado' || nextRole !== 'empleado')) {
+      return res.status(403).json({ message: 'Solo un administrador puede modificar esta cuenta' });
+    }
+
+    if (req.user.rol !== 'admin' && nextRole !== 'empleado') {
+      return res.status(403).json({ message: 'Solo un administrador puede asignar este rol' });
+    }
+
+    if (userId === req.user.id && nextRole !== req.user.rol) {
+      return res.status(400).json({ message: 'No puedes cambiar tu propio rol' });
+    }
+
+    if (password) {
+      const passwordHash = await bcrypt.hash(password, 10);
+      await pool.query(
+        `UPDATE usuarios
+         SET nombre = ?, correo = ?, telefono = ?, rol = ?, password_hash = ?
+         WHERE id = ?`,
+        [nombre, correo, telefono || null, nextRole, passwordHash, userId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE usuarios
+         SET nombre = ?, correo = ?, telefono = ?, rol = ?
+         WHERE id = ?`,
+        [nombre, correo, telefono || null, nextRole, userId]
+      );
+    }
+
+    res.json({
+      id: userId,
+      nombre,
+      correo,
+      rol: nextRole,
+      telefono: telefono || null,
+      activo: target.activo,
+    });
+  } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ message: 'El correo ya esta registrado' });
+    }
+
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar usuario' });
+  }
+};
+
 export const updateUserStatus = async (req, res) => {
   try {
     const userId = Number(req.params.id);
