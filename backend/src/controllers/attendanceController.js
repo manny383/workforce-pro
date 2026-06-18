@@ -6,6 +6,29 @@ const toFiniteNumber = (value) => {
   return Number.isFinite(number) ? number : null;
 };
 
+const GPS_FALLBACK_TOLERANCE_METERS = 25;
+const GPS_MAX_TOLERANCE_METERS = 100;
+
+const getGpsTolerance = (accuracy) => {
+  if (accuracy === null) return GPS_FALLBACK_TOLERANCE_METERS;
+  return Math.min(Math.max(Math.ceil(accuracy), GPS_FALLBACK_TOLERANCE_METERS), GPS_MAX_TOLERANCE_METERS);
+};
+
+const getBiometricVerification = (value) => {
+  if (!value || value.verificada !== true || value.metodo !== 'platform') return null;
+  if (typeof value.credential_id !== 'string' || value.credential_id.length < 16) return null;
+  if (typeof value.tipo !== 'string' || value.tipo !== 'public-key') return null;
+
+  const verifiedAt = new Date(value.timestamp);
+  if (Number.isNaN(verifiedAt.getTime())) return null;
+
+  return {
+    method: value.metodo,
+    credentialId: value.credential_id.slice(0, 255),
+    verifiedAt,
+  };
+};
+
 const distanceInMeters = (latitudeA, longitudeA, latitudeB, longitudeB) => {
   const toRadians = (degrees) => degrees * (Math.PI / 180);
   const earthRadius = 6371000;
@@ -62,10 +85,16 @@ export const clockIn = async (req, res) => {
     const locationId = Number(req.body.locacion_id);
     const latitude = toFiniteNumber(req.body.latitud);
     const longitude = toFiniteNumber(req.body.longitud);
+    const accuracy = toFiniteNumber(req.body.precision);
+    const biometricVerification = getBiometricVerification(req.body.biometria);
     const userId = req.user.id;
 
     if (!Number.isInteger(locationId) || latitude === null || longitude === null) {
       return res.status(400).json({ message: 'Ubicacion y coordenadas validas son requeridas' });
+    }
+
+    if (!biometricVerification) {
+      return res.status(403).json({ message: 'Verificacion biometrica requerida antes de registrar asistencia' });
     }
 
     const [openAttendances] = await pool.query(
@@ -101,9 +130,12 @@ export const clockIn = async (req, res) => {
       Number(location.latitud),
       Number(location.longitud)
     );
-    if (distance > Number(location.radio_permitido)) {
+    const allowedRadius = Number(location.radio_permitido);
+    const gpsTolerance = getGpsTolerance(accuracy);
+    const effectiveRadius = allowedRadius + gpsTolerance;
+    if (distance > effectiveRadius) {
       return res.status(403).json({
-        message: `Estas fuera del area permitida por ${Math.ceil(distance - Number(location.radio_permitido))} metros`,
+        message: `Estas fuera del area permitida por ${Math.ceil(distance - effectiveRadius)} metros. Distancia detectada: ${Math.round(distance)} m; radio autorizado: ${allowedRadius} m + margen GPS: ${gpsTolerance} m.`,
       });
     }
 
@@ -125,12 +157,31 @@ export const clockIn = async (req, res) => {
          entrada,
          estatus,
          origen,
+         biometria_verificada,
+         metodo_biometrico,
+         biometria_credential_id,
+         biometria_verificada_en,
          latitud_entrada,
          longitud_entrada,
+         precision_entrada,
          distancia_entrada
        )
-       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?)`,
-      [userId, locationId, assignment?.asignacion_id ?? null, status, origin, latitude, longitude, distance]
+       VALUES (?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        locationId,
+        assignment?.asignacion_id ?? null,
+        status,
+        origin,
+        true,
+        biometricVerification.method,
+        biometricVerification.credentialId,
+        biometricVerification.verifiedAt,
+        latitude,
+        longitude,
+        accuracy,
+        distance,
+      ]
     );
 
     res.json({
@@ -138,6 +189,7 @@ export const clockIn = async (req, res) => {
       id: result.insertId,
       estatus: status,
       origen: origin,
+      biometria_verificada: true,
       distancia_entrada: Math.round(distance),
     });
   } catch (error) {
@@ -214,8 +266,12 @@ export const getAttendance = async (req, res) => {
          a.salida,
          a.estatus,
          COALESCE(a.origen, IF(a.asignacion_id IS NULL, 'manual', 'horario')) AS origen,
+         a.biometria_verificada,
+         a.metodo_biometrico,
+         a.biometria_verificada_en,
          a.latitud_entrada,
          a.longitud_entrada,
+         a.precision_entrada,
          a.latitud_salida,
          a.longitud_salida,
          TIMESTAMPDIFF(MINUTE, a.entrada, COALESCE(a.salida, NOW())) AS duracion_minutos

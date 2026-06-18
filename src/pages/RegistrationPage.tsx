@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Camera, CheckCircle2, Fingerprint, LoaderCircle, MapPin, ShieldCheck, User } from 'lucide-react';
 import { API_URL, readApiResponse } from '../config/api';
+import { verifyBiometricPresence, type BiometricVerification } from '../lib/biometric';
 import type { Session } from '../types/auth';
 
 type TodayAssignment = {
@@ -10,7 +11,7 @@ type TodayAssignment = {
 };
 type ClockInLocation = { id: number; nombre: string; descripcion: string | null };
 
-export const RegistrationView = ({ session, onComplete }: { session: Session; onComplete: (locationId: number) => Promise<void> }) => {
+export const RegistrationView = ({ session, onComplete }: { session: Session; onComplete: (locationId: number, biometric: BiometricVerification) => Promise<void> }) => {
   const [showBioDetails, setShowBioDetails] = useState(false);
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -42,7 +43,8 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
 
     try {
       if (!selectedLocationId) throw new Error('Selecciona una ubicacion');
-      await onComplete(selectedLocationId);
+      const biometric = await verifyBiometricPresence(session.user);
+      await onComplete(selectedLocationId, biometric);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo registrar la asistencia');
     } finally {
@@ -75,7 +77,7 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
           <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
             <div className="glass-panel rounded-full px-3 py-1.5 shadow-sm">
               <span className="flex items-center gap-1 text-[10px] font-bold text-primary">
-                <User size={14} /> FACE VERIFICATION
+                <User size={14} /> VERIFICACION FACIAL
               </span>
             </div>
             <button className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-on-primary shadow-lg transition-transform active:scale-90">
@@ -91,7 +93,7 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-outline-variant/20 bg-surface-container-lowest shadow-[0px_0px_20px_rgba(0,67,84,0.1)]">
             <Fingerprint className="text-primary" size={36} />
           </div>
-          <p className="text-center text-[10px] font-bold leading-tight text-on-surface-variant uppercase tracking-wider">Biometric Entry</p>
+          <p className="text-center text-[10px] font-bold leading-tight text-on-surface-variant uppercase tracking-wider">Entrada biometrica</p>
         </button>
 
         <div className="flex flex-col overflow-hidden rounded-2xl bg-surface-container-low ring-1 ring-outline-variant/10">
@@ -145,12 +147,12 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
           className="flex h-[64px] w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-br from-primary to-primary-container shadow-xl transition-all active:scale-95"
         >
           <span className="font-headline text-lg font-bold tracking-wide text-on-primary">
-            {isSaving ? 'Registrando...' : 'Agregar asistencia'}
+            {isSaving ? 'Verificando...' : 'Agregar asistencia'}
           </span>
           <ArrowRight className="text-on-primary" size={20} />
         </button>
         <p className="px-8 text-center text-[11px] font-medium leading-relaxed text-on-surface-variant">
-          Al agregar asistencia autorizas capturar tu ubicacion GPS actual para validar el registro.
+          Antes de registrar se solicitara huella, rostro o bloqueo del dispositivo. Tambien autorizas capturar tu ubicacion GPS actual.
         </p>
       </div>
 
@@ -173,9 +175,9 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
               <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/5">
                 <ShieldCheck className="text-primary" size={28} />
               </div>
-              <h3 className="font-headline text-xl font-bold text-primary">Biometric Verification</h3>
+              <h3 className="font-headline text-xl font-bold text-primary">Verificacion biometrica</h3>
               <p className="mt-2 text-sm leading-relaxed text-on-surface-variant">
-                Our enterprise security protocol ensures your identity is verified with the highest level of precision.
+                La asistencia se registra solo despues de confirmar tu identidad con huella, rostro o el bloqueo seguro del dispositivo.
               </p>
               
               <div className="mt-6 space-y-4">
@@ -184,8 +186,8 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
                     <Fingerprint size={16} className="text-primary" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-on-surface">Data Captured</p>
-                    <p className="text-[11px] text-on-surface-variant">Encrypted fingerprint minutiae and 3D facial depth maps.</p>
+                    <p className="text-xs font-bold text-on-surface">Validacion requerida</p>
+                    <p className="text-[11px] text-on-surface-variant">El sistema pedira la verificacion nativa disponible en tu telefono.</p>
                   </div>
                 </div>
                 <div className="flex gap-4">
@@ -193,8 +195,8 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
                     <ShieldCheck size={16} className="text-primary" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-on-surface">Privacy First</p>
-                    <p className="text-[11px] text-on-surface-variant">Biometric data never leaves your device's secure enclave hardware.</p>
+                    <p className="text-xs font-bold text-on-surface">Privacidad</p>
+                    <p className="text-[11px] text-on-surface-variant">La aplicacion no recibe ni guarda tu huella o rostro; solo espera la confirmacion del dispositivo.</p>
                   </div>
                 </div>
               </div>
@@ -203,7 +205,7 @@ export const RegistrationView = ({ session, onComplete }: { session: Session; on
                 onClick={() => setShowBioDetails(false)}
                 className="mt-8 w-full rounded-xl bg-primary py-3 text-sm font-bold text-white transition-transform active:scale-[0.98]"
               >
-                Got it
+                Entendido
               </button>
             </motion.div>
           </div>

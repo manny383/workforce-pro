@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "migrate": "node scripts/run-migration.js",
+    "migrate:biometric": "node scripts/run-migration.js 20260617_add_attendance_biometric_evidence.sql"
   },
   "keywords": [],
   "author": "",

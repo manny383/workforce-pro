@@ -5,6 +5,7 @@ import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'r
 import { BottomNav } from './components/BottomNav';
 import { TopBar } from './components/TopBar';
 import { API_URL, readApiResponse } from './config/api';
+import type { BiometricVerification } from './lib/biometric';
 import { getCurrentPosition } from './lib/geo';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './lib/sessionStorage';
 import { cn } from './lib/utils';
@@ -88,7 +89,7 @@ function AppRoutes() {
     navigate(getViewPath(nextView, userType));
   };
 
-  const handleClockIn = async (locationId: number) => {
+  const handleClockIn = async (locationId: number, biometric: BiometricVerification) => {
     if (!session) {
       navigate('/login', { replace: true });
       throw new Error('Inicia sesion de nuevo');
@@ -105,6 +106,8 @@ function AppRoutes() {
         locacion_id: locationId,
         latitud: position.coords.latitude,
         longitud: position.coords.longitude,
+        precision: position.coords.accuracy,
+        biometria: biometric,
       }),
     });
 
