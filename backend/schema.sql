@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   password_hash VARCHAR(255) NOT NULL,
   rol ENUM('admin', 'supervisor', 'empleado') DEFAULT 'empleado',
   telefono VARCHAR(20),
+  foto_url LONGTEXT,
   activo BOOLEAN DEFAULT TRUE,
   fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -5,6 +5,7 @@ import type { ApiUser, Session } from '../types/auth';
 
 type ManagedUser = ApiUser & {
   telefono: string | null;
+  foto_url?: string | null;
   activo: number | boolean;
   ubicacion_hoy?: string | null;
   turno_hoy?: string | null;
@@ -323,8 +324,8 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
             return (
               <article key={user.id} className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm ring-1 ring-outline-variant/10">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-headline text-lg font-extrabold text-primary">
-                    {user.nombre.slice(0, 2).toUpperCase()}
+                  <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-primary/10 font-headline text-lg font-extrabold text-primary">
+                    {user.foto_url ? <img src={user.foto_url} alt={user.nombre} className="h-full w-full object-cover" /> : user.nombre.slice(0, 2).toUpperCase()}
                   </div>
                   <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase ${todayStatus.className}`}>
                     {todayStatus.label}

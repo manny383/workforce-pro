@@ -1,5 +1,6 @@
 import express from 'express';
-import { login, register } from '../controllers/authController.js';
+import { login, register, updateProfilePhoto } from '../controllers/authController.js';
+import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -8,5 +9,7 @@ router.post('/login', login);
 
 // 🧾 Registro
 router.post('/register', register);
+
+router.patch('/photo', verifyToken, updateProfilePhoto);
 
 export default router;

@@ -7,7 +7,7 @@ export const getUsers = async (req, res) => {
   try {
     const [users] = await pool.query(
       `SELECT
-         u.id, u.nombre, u.correo, u.rol, u.telefono, u.activo, u.fecha_creacion,
+         u.id, u.nombre, u.correo, u.rol, u.telefono, u.foto_url, u.activo, u.fecha_creacion,
          today_assignment.id AS asignacion_hoy_id,
          today_location.nombre AS ubicacion_hoy,
          today_shift.nombre_turno AS turno_hoy,

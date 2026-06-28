@@ -28,7 +28,7 @@ export const login = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      `SELECT id, nombre, correo, password_hash, rol, activo
+      `SELECT id, nombre, correo, password_hash, rol, foto_url, activo
        FROM usuarios
        WHERE correo = ?
        LIMIT 1`,
@@ -57,6 +57,7 @@ export const login = async (req, res) => {
         nombre: user.nombre,
         correo: user.correo,
         rol: user.rol,
+        foto_url: user.foto_url,
       },
     });
   } catch (error) {
@@ -90,6 +91,7 @@ export const register = async (req, res) => {
         nombre,
         correo: userEmail,
         rol,
+        foto_url: null,
       },
     });
   } catch (error) {
@@ -99,5 +101,26 @@ export const register = async (req, res) => {
 
     console.error(error);
     res.status(500).json({ message: 'Error al registrar usuario' });
+  }
+};
+
+export const updateProfilePhoto = async (req, res) => {
+  try {
+    const { foto_url } = req.body;
+
+    if (typeof foto_url !== 'string' || !foto_url.startsWith('data:image/')) {
+      return res.status(400).json({ message: 'La foto debe ser una imagen valida' });
+    }
+
+    if (foto_url.length > 750000) {
+      return res.status(400).json({ message: 'La foto es demasiado grande. Usa una imagen menor a 500 KB.' });
+    }
+
+    await pool.query('UPDATE usuarios SET foto_url = ? WHERE id = ?', [foto_url, req.user.id]);
+
+    res.json({ foto_url });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar la foto' });
   }
 };

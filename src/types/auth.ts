@@ -5,6 +5,7 @@ export type ApiUser = {
   nombre: string;
   correo: string;
   rol: 'admin' | 'supervisor' | 'empleado';
+  foto_url?: string | null;
 };
 
 export type Session = {

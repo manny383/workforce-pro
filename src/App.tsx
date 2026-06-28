@@ -148,6 +148,7 @@ function AppRoutes() {
         <TopBar
           title="Workforce Pro"
           userType={userType}
+          session={session}
           onViewChange={handleViewChange}
         />
       )}
@@ -189,7 +190,7 @@ function AppRoutes() {
                 )}
               />
               <Route path="/history" element={<ProtectedRoute session={session}>{session && <HistoryView session={session} />}</ProtectedRoute>} />
-              <Route path="/settings" element={<ProtectedRoute session={session}><SettingsView /></ProtectedRoute>} />
+              <Route path="/settings" element={<ProtectedRoute session={session}>{session && <SettingsView session={session} onSessionChange={handleLogin} />}</ProtectedRoute>} />
               <Route
                 path="/locations"
                 element={(
