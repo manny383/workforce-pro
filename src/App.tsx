@@ -10,6 +10,7 @@ import { getCurrentPosition } from './lib/geo';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from './lib/sessionStorage';
 import { cn } from './lib/utils';
 import { DashboardView } from './pages/DashboardPage';
+import { CheckoutView } from './pages/CheckoutPage';
 import { HistoryView } from './pages/HistoryPage';
 import { LoginView } from './pages/LoginPage';
 import { LocationsView } from './pages/LocationsPage';
@@ -17,7 +18,9 @@ import { ManagerDashboardView } from './pages/ManagerDashboardPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { RegistrationView } from './pages/RegistrationPage';
 import { SettingsView } from './pages/SettingsPage';
+import { ShiftsView } from './pages/ShiftsPage';
 import { TeamView } from './pages/TeamPage';
+import { TodayView } from './pages/TodayPage';
 import { ProtectedRoute, PublicRoute } from './routes/ProtectedRoute';
 import { getHomePath, getUserType, getViewFromPath, getViewPath } from './routes/routeUtils';
 import type { Session, View } from './types/auth';
@@ -135,13 +138,8 @@ function AppRoutes() {
       }),
     });
 
-    if (!response.ok) {
-      const data = await response.json();
-      alert(data.message || 'No se pudo registrar la salida');
-      return;
-    }
-
-    alert('Salida registrada');
+    await readApiResponse(response);
+    navigate('/dashboard');
   };
 
   return (
@@ -209,6 +207,54 @@ function AppRoutes() {
                 )}
               />
               <Route
+                path="/shifts"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
+                    {session && <ShiftsView session={session} onBack={() => navigate('/manager')} />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/today"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
+                    {session && <TodayView session={session} onBack={() => navigate('/manager')} />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/today-active"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
+                    {session && <TodayView session={session} onBack={() => navigate('/manager')} initialFilter="en_turno" title="Trabajadores activos" />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/today-late"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
+                    {session && <TodayView session={session} onBack={() => navigate('/manager')} initialFilter="retardo" title="Retardos hoy" />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/today-absent"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['admin', 'supervisor']}>
+                    {session && <TodayView session={session} onBack={() => navigate('/manager')} initialFilter="ausente" title="Ausentes hoy" />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
+                path="/checkout"
+                element={(
+                  <ProtectedRoute session={session} allowedRoles={['empleado']}>
+                    {session && <CheckoutView session={session} onComplete={handleClockOut} />}
+                  </ProtectedRoute>
+                )}
+              />
+              <Route
                 path="/schedule"
                 element={(
                   <ProtectedRoute session={session}>
@@ -222,7 +268,7 @@ function AppRoutes() {
         </AnimatePresence>
       </main>
 
-      {session && currentView !== 'login' && currentView !== 'registration' && (
+      {session && currentView !== 'login' && currentView !== 'registration' && currentView !== 'checkout' && (
         <BottomNav currentView={currentView} onViewChange={handleViewChange} />
       )}
     </div>

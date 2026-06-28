@@ -14,7 +14,7 @@ type DashboardData = {
 const duration = (minutes = 0) => `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`;
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' }) : 'Sin actividad';
 
-export const DashboardView = ({ session, onAction, onClockOut }: { session: Session; onAction: (v: View) => void; onClockOut: () => void }) => {
+export const DashboardView = ({ session, onAction }: { session: Session; onAction: (v: View) => void; onClockOut: () => void }) => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
@@ -43,7 +43,7 @@ export const DashboardView = ({ session, onAction, onClockOut }: { session: Sess
 
     <section className="grid gap-4 md:grid-cols-2">
       <button disabled={data.checkedIn} onClick={() => onAction('registration')} className="signature-gradient flex h-[160px] flex-col justify-between rounded-2xl p-6 text-left disabled:opacity-40"><Clock className="text-white" /><div><h3 className="font-headline text-2xl font-bold text-white">Agregar asistencia</h3><p className="text-sm text-primary-fixed/80">{assignment ? `${assignment.hora_entrada.slice(0, 5)} - ${assignment.hora_salida.slice(0, 5)}` : 'Sin turno asignado'}</p></div></button>
-      <button disabled={!data.checkedIn} onClick={onClockOut} className="flex h-[160px] flex-col justify-between rounded-2xl bg-surface-container-high p-6 text-left disabled:opacity-40"><LogOut /><div><h3 className="font-headline text-2xl font-bold">Registrar salida</h3><p className="text-sm text-on-surface-variant">{data.checkedIn ? data.latestAttendance?.locacion_nombre : 'No tienes una entrada abierta'}</p></div></button>
+      <button disabled={!data.checkedIn} onClick={() => onAction('checkout')} className="flex h-[160px] flex-col justify-between rounded-2xl bg-surface-container-high p-6 text-left disabled:opacity-40"><LogOut /><div><h3 className="font-headline text-2xl font-bold">Registrar salida</h3><p className="text-sm text-on-surface-variant">{data.checkedIn ? data.latestAttendance?.locacion_nombre : 'No tienes una entrada abierta'}</p></div></button>
     </section>
 
     <section className="grid gap-4 md:grid-cols-3">

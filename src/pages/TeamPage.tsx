@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ArrowLeft, CalendarClock, LoaderCircle, MapPin, Pencil, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Clock3, LoaderCircle, MapPin, Pencil, Plus, Search, ShieldCheck, UserCheck, UserX, X } from 'lucide-react';
 import { API_URL } from '../config/api';
 import type { ApiUser, Session } from '../types/auth';
 
 type ManagedUser = ApiUser & {
   telefono: string | null;
   activo: number | boolean;
+  ubicacion_hoy?: string | null;
+  turno_hoy?: string | null;
+  hora_entrada_hoy?: string | null;
+  hora_salida_hoy?: string | null;
+  asistencia_hoy_id?: number | null;
+  entrada_hoy?: string | null;
+  salida_hoy?: string | null;
+  estatus_hoy?: 'presente' | 'retardo' | 'ausente' | string | null;
+  ultima_entrada?: string | null;
+  ultima_salida?: string | null;
+  ultima_ubicacion?: string | null;
 };
 
 const emptyForm = { nombre: '', correo: '', password: '', telefono: '', rol: 'empleado' as ApiUser['rol'] };
@@ -28,10 +39,36 @@ type Assignment = {
   fecha_inicio: string; fecha_fin: string | null; dias_semana: number[]; activa: number | boolean;
 };
 const emptyAssignment = { locacion_id: '', turno_id: '', fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: '', dias_semana: [1, 2, 3, 4, 5] };
+const filterOptions = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'activos', label: 'Activos' },
+  { value: 'inactivos', label: 'Inactivos' },
+  { value: 'programados', label: 'Programados hoy' },
+  { value: 'sin-horario', label: 'Sin horario hoy' },
+  { value: 'presentes', label: 'Presentes' },
+  { value: 'retardos', label: 'Retardos' },
+  { value: 'pendientes', label: 'Pendientes' },
+] as const;
+type TeamFilter = typeof filterOptions[number]['value'];
+
+const formatTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }) : '';
+const formatHour = (value?: string | null) => value ? String(value).slice(0, 5) : '';
+const isActive = (user: ManagedUser) => Boolean(user.activo);
+const isScheduledToday = (user: ManagedUser) => Boolean(user.turno_hoy);
+const hasAttendanceToday = (user: ManagedUser) => Boolean(user.asistencia_hoy_id);
+const getTodayStatus = (user: ManagedUser) => {
+  if (!isActive(user)) return { label: 'Inactivo', className: 'bg-error-container/40 text-error' };
+  if (hasAttendanceToday(user) && !user.salida_hoy) return { label: user.estatus_hoy === 'retardo' ? 'Retardo en curso' : 'En turno', className: user.estatus_hoy === 'retardo' ? 'bg-error-container/40 text-error' : 'bg-tertiary/10 text-tertiary' };
+  if (hasAttendanceToday(user)) return { label: user.estatus_hoy === 'retardo' ? 'Retardo' : 'Presente', className: user.estatus_hoy === 'retardo' ? 'bg-error-container/40 text-error' : 'bg-tertiary/10 text-tertiary' };
+  if (isScheduledToday(user)) return { label: 'Pendiente', className: 'bg-primary/10 text-primary' };
+  return { label: 'Sin horario hoy', className: 'bg-surface-container-low text-on-surface-variant' };
+};
 
 export const TeamView = ({ session, onBack }: { session: Session; onBack: () => void }) => {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [query, setQuery] = useState('');
+  const [teamFilter, setTeamFilter] = useState<TeamFilter>('todos');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -90,8 +127,27 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
 
   const filteredUsers = useMemo(() => {
     const term = query.toLowerCase().trim();
-    return users.filter((user) => !term || `${user.nombre} ${user.correo} ${user.rol}`.toLowerCase().includes(term));
-  }, [query, users]);
+    return users.filter((user) => {
+      const matchesTerm = !term || `${user.nombre} ${user.correo} ${user.rol} ${user.ubicacion_hoy || ''} ${user.turno_hoy || ''}`.toLowerCase().includes(term);
+      if (!matchesTerm) return false;
+
+      if (teamFilter === 'activos') return isActive(user);
+      if (teamFilter === 'inactivos') return !isActive(user);
+      if (teamFilter === 'programados') return isScheduledToday(user);
+      if (teamFilter === 'sin-horario') return !isScheduledToday(user);
+      if (teamFilter === 'presentes') return hasAttendanceToday(user) && user.estatus_hoy !== 'retardo';
+      if (teamFilter === 'retardos') return user.estatus_hoy === 'retardo';
+      if (teamFilter === 'pendientes') return isActive(user) && isScheduledToday(user) && !hasAttendanceToday(user);
+      return true;
+    });
+  }, [query, teamFilter, users]);
+
+  const teamStats = useMemo(() => ({
+    scheduled: users.filter((user) => isActive(user) && isScheduledToday(user)).length,
+    present: users.filter((user) => hasAttendanceToday(user) && user.estatus_hoy !== 'retardo').length,
+    late: users.filter((user) => user.estatus_hoy === 'retardo').length,
+    pending: users.filter((user) => isActive(user) && isScheduledToday(user) && !hasAttendanceToday(user)).length,
+  }), [users]);
 
   const createUser = async (event: FormEvent) => {
     event.preventDefault();
@@ -226,42 +282,95 @@ export const TeamView = ({ session, onBack }: { session: Session; onBack: () => 
 
       {error && <div className="rounded-xl bg-error-container/40 px-5 py-4 text-sm font-semibold text-error">{error}</div>}
 
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'Programados hoy', value: teamStats.scheduled },
+          { label: 'Presentes', value: teamStats.present },
+          { label: 'Retardos', value: teamStats.late },
+          { label: 'Pendientes', value: teamStats.pending },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-2xl bg-surface-container-lowest p-5 shadow-sm ring-1 ring-outline-variant/10">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">{stat.label}</span>
+            <p className="mt-2 font-headline text-3xl font-extrabold text-primary">{stat.value}</p>
+          </div>
+        ))}
+      </section>
+
       <div className="flex items-center gap-3 rounded-2xl bg-surface-container-lowest px-5 py-4 shadow-sm ring-1 ring-outline-variant/10">
         <Search size={19} className="text-outline" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre, correo o rol" className="w-full border-0 bg-transparent text-sm outline-none" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nombre, correo, rol, turno o ubicacion" className="w-full border-0 bg-transparent text-sm outline-none" />
         <span className="text-xs font-bold text-on-surface-variant">{filteredUsers.length} usuarios</span>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {filterOptions.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => setTeamFilter(option.value)}
+            className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold ${teamFilter === option.value ? 'bg-primary text-white' : 'bg-surface-container-lowest text-on-surface-variant ring-1 ring-outline-variant/10'}`}
+          >
+            {option.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
         <div className="flex justify-center py-20"><LoaderCircle className="animate-spin text-primary" /></div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredUsers.map((user) => (
-            <article key={user.id} className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm ring-1 ring-outline-variant/10">
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-headline text-lg font-extrabold text-primary">
-                  {user.nombre.slice(0, 2).toUpperCase()}
+          {filteredUsers.map((user) => {
+            const todayStatus = getTodayStatus(user);
+            return (
+              <article key={user.id} className="rounded-2xl bg-surface-container-lowest p-6 shadow-sm ring-1 ring-outline-variant/10">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 font-headline text-lg font-extrabold text-primary">
+                    {user.nombre.slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase ${todayStatus.className}`}>
+                    {todayStatus.label}
+                  </span>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase ${user.activo ? 'bg-tertiary/10 text-tertiary' : 'bg-error-container/40 text-error'}`}>
-                  {user.activo ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
-              <h3 className="mt-5 font-headline text-lg font-bold text-on-surface">{user.nombre}</h3>
-              <p className="mt-1 truncate text-sm text-on-surface-variant">{user.correo}</p>
-              <div className="mt-5 flex items-center justify-between border-t border-outline-variant/10 pt-4">
-                <span className="flex items-center gap-2 text-xs font-bold capitalize text-primary"><ShieldCheck size={15} /> {user.rol}</span>
-                <button disabled={user.id === session.user.id} onClick={() => void toggleStatus(user)} className="flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-2 text-xs font-bold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-40">
-                  {user.activo ? <UserX size={15} /> : <UserCheck size={15} />} {user.activo ? 'Desactivar' : 'Activar'}
+                <h3 className="mt-5 font-headline text-lg font-bold text-on-surface">{user.nombre}</h3>
+                <p className="mt-1 truncate text-sm text-on-surface-variant">{user.correo}</p>
+
+                <div className="mt-5 grid gap-3 rounded-2xl bg-surface-container-low p-4">
+                  <div className="flex items-start gap-2">
+                    <CalendarClock size={16} className="mt-0.5 text-primary" />
+                    <div>
+                      <p className="text-xs font-bold text-on-surface">{user.turno_hoy || 'Sin turno para hoy'}</p>
+                      <p className="text-xs text-on-surface-variant">
+                        {user.turno_hoy ? `${formatHour(user.hora_entrada_hoy)} - ${formatHour(user.hora_salida_hoy)}` : 'No hay asignacion activa este dia'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <MapPin size={16} className="mt-0.5 text-primary" />
+                    <p className="text-xs text-on-surface-variant">{user.ubicacion_hoy || user.ultima_ubicacion || 'Sin ubicacion registrada'}</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Clock3 size={16} className="mt-0.5 text-primary" />
+                    <p className="text-xs text-on-surface-variant">
+                      {user.entrada_hoy ? `Entrada hoy ${formatTime(user.entrada_hoy)}${user.salida_hoy ? `, salida ${formatTime(user.salida_hoy)}` : ', en curso'}`
+                        : user.ultima_entrada ? `Ultimo registro ${formatTime(user.ultima_entrada)}` : 'Sin registros de asistencia'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex items-center justify-between border-t border-outline-variant/10 pt-4">
+                  <span className="flex items-center gap-2 text-xs font-bold capitalize text-primary"><ShieldCheck size={15} /> {user.rol}</span>
+                  <button disabled={user.id === session.user.id} onClick={() => void toggleStatus(user)} className="flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-2 text-xs font-bold text-on-surface-variant disabled:cursor-not-allowed disabled:opacity-40">
+                    {user.activo ? <UserX size={15} /> : <UserCheck size={15} />} {user.activo ? 'Desactivar' : 'Activar'}
+                  </button>
+                </div>
+                <button onClick={() => void openSchedule(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary/10 py-3 text-xs font-bold text-primary">
+                  <CalendarClock size={16} /> Administrar horarios
                 </button>
-              </div>
-              <button onClick={() => void openSchedule(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-primary/10 py-3 text-xs font-bold text-primary">
-                <CalendarClock size={16} /> Administrar horarios
-              </button>
-              <button onClick={() => openEditUser(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-low py-3 text-xs font-bold text-on-surface-variant">
-                <Pencil size={16} /> Editar datos
-              </button>
-            </article>
-          ))}
+                <button onClick={() => openEditUser(user)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-surface-container-low py-3 text-xs font-bold text-on-surface-variant">
+                  <Pencil size={16} /> Editar datos
+                </button>
+              </article>
+            );
+          })}
         </div>
       )}
 

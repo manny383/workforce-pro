@@ -1,4 +1,4 @@
-export type View = 'login' | 'dashboard' | 'manager' | 'history' | 'settings' | 'registration' | 'locations' | 'team' | 'schedule';
+export type View = 'login' | 'dashboard' | 'manager' | 'history' | 'settings' | 'registration' | 'checkout' | 'locations' | 'team' | 'shifts' | 'today' | 'today-active' | 'today-late' | 'today-absent' | 'schedule';
 
 export type ApiUser = {
   id: number;

@@ -6,9 +6,53 @@ const roles = ['admin', 'supervisor', 'empleado'];
 export const getUsers = async (req, res) => {
   try {
     const [users] = await pool.query(
-      `SELECT id, nombre, correo, rol, telefono, activo, fecha_creacion
-       FROM usuarios
-       ORDER BY activo DESC, nombre ASC`
+      `SELECT
+         u.id, u.nombre, u.correo, u.rol, u.telefono, u.activo, u.fecha_creacion,
+         today_assignment.id AS asignacion_hoy_id,
+         today_location.nombre AS ubicacion_hoy,
+         today_shift.nombre_turno AS turno_hoy,
+         today_shift.hora_entrada AS hora_entrada_hoy,
+         today_shift.hora_salida AS hora_salida_hoy,
+         today_attendance.id AS asistencia_hoy_id,
+         today_attendance.entrada AS entrada_hoy,
+         today_attendance.salida AS salida_hoy,
+         today_attendance.estatus AS estatus_hoy,
+         last_attendance.entrada AS ultima_entrada,
+         last_attendance.salida AS ultima_salida,
+         last_location.nombre AS ultima_ubicacion
+       FROM usuarios u
+       LEFT JOIN asignaciones today_assignment
+         ON today_assignment.id = (
+           SELECT a.id
+           FROM asignaciones a
+           WHERE a.usuario_id = u.id
+             AND a.activa = TRUE
+             AND CURDATE() BETWEEN a.fecha_inicio AND COALESCE(a.fecha_fin, '9999-12-31')
+             AND JSON_CONTAINS(a.dias_semana, CAST(WEEKDAY(CURDATE()) + 1 AS JSON), '$')
+           ORDER BY a.fecha_inicio DESC, a.id DESC
+           LIMIT 1
+         )
+       LEFT JOIN locaciones today_location ON today_location.id = today_assignment.locacion_id
+       LEFT JOIN turnos today_shift ON today_shift.id = today_assignment.turno_id
+       LEFT JOIN asistencias today_attendance
+         ON today_attendance.id = (
+           SELECT att.id
+           FROM asistencias att
+           WHERE att.usuario_id = u.id
+             AND DATE(att.entrada) = CURDATE()
+           ORDER BY att.entrada DESC, att.id DESC
+           LIMIT 1
+         )
+       LEFT JOIN asistencias last_attendance
+         ON last_attendance.id = (
+           SELECT att.id
+           FROM asistencias att
+           WHERE att.usuario_id = u.id
+           ORDER BY att.entrada DESC, att.id DESC
+           LIMIT 1
+         )
+       LEFT JOIN locaciones last_location ON last_location.id = last_attendance.locacion_id
+       ORDER BY u.activo DESC, u.nombre ASC`
     );
 
     res.json(users);
@@ -252,6 +296,72 @@ export const getShifts = async (req, res) => {
   }
 };
 
+export const createShift = async (req, res) => {
+  try {
+    const { nombre_turno, hora_entrada, hora_salida, tolerancia_minutos = 10 } = req.body;
+    const tolerance = Number(tolerancia_minutos);
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+    if (!nombre_turno || !timePattern.test(hora_entrada || '') || !timePattern.test(hora_salida || '')
+      || !Number.isInteger(tolerance) || tolerance < 0) {
+      return res.status(400).json({ message: 'Nombre, horarios y tolerancia valida son requeridos' });
+    }
+
+    const [result] = await pool.query(
+      `INSERT INTO turnos (nombre_turno, hora_entrada, hora_salida, tolerancia_minutos)
+       VALUES (?, ?, ?, ?)`,
+      [nombre_turno, hora_entrada, hora_salida, tolerance]
+    );
+
+    res.status(201).json({
+      id: result.insertId,
+      nombre_turno,
+      hora_entrada,
+      hora_salida,
+      tolerancia_minutos: tolerance,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al crear turno' });
+  }
+};
+
+export const updateShift = async (req, res) => {
+  try {
+    const shiftId = Number(req.params.id);
+    const { nombre_turno, hora_entrada, hora_salida, tolerancia_minutos = 10 } = req.body;
+    const tolerance = Number(tolerancia_minutos);
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+    if (!Number.isInteger(shiftId) || !nombre_turno || !timePattern.test(hora_entrada || '')
+      || !timePattern.test(hora_salida || '') || !Number.isInteger(tolerance) || tolerance < 0) {
+      return res.status(400).json({ message: 'Datos de turno invalidos' });
+    }
+
+    const [result] = await pool.query(
+      `UPDATE turnos
+       SET nombre_turno = ?, hora_entrada = ?, hora_salida = ?, tolerancia_minutos = ?
+       WHERE id = ?`,
+      [nombre_turno, hora_entrada, hora_salida, tolerance, shiftId]
+    );
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ message: 'Turno no encontrado' });
+    }
+
+    res.json({
+      id: shiftId,
+      nombre_turno,
+      hora_entrada,
+      hora_salida,
+      tolerancia_minutos: tolerance,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al actualizar turno' });
+  }
+};
+
 export const getUserAssignments = async (req, res) => {
   try {
     const userId = Number(req.params.id);
@@ -411,5 +521,68 @@ export const getManagerDashboard = async (req, res) => {
         ? 'Error al cargar el dashboard administrativo'
         : `Error al cargar el dashboard administrativo: ${error.message}`,
     });
+  }
+};
+
+export const getTodayOverview = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+         u.id AS usuario_id,
+         u.nombre,
+         u.correo,
+         u.telefono,
+         a.id AS asignacion_id,
+         l.nombre AS locacion_nombre,
+         t.nombre_turno,
+         t.hora_entrada,
+         t.hora_salida,
+         t.tolerancia_minutos,
+         att.id AS asistencia_id,
+         att.entrada,
+         att.salida,
+         att.estatus,
+         TIMESTAMPDIFF(MINUTE, att.entrada, COALESCE(att.salida, NOW())) AS duracion_minutos,
+         CASE
+           WHEN att.id IS NOT NULL AND att.salida IS NULL AND att.estatus = 'retardo' THEN 'retardo_en_curso'
+           WHEN att.id IS NOT NULL AND att.salida IS NULL THEN 'en_turno'
+           WHEN att.id IS NOT NULL AND att.estatus = 'retardo' THEN 'retardo'
+           WHEN att.id IS NOT NULL THEN 'presente'
+           WHEN CURTIME() > ADDTIME(t.hora_entrada, SEC_TO_TIME(t.tolerancia_minutos * 60)) THEN 'ausente'
+           ELSE 'pendiente'
+         END AS estado_hoy
+       FROM asignaciones a
+       INNER JOIN usuarios u ON u.id = a.usuario_id AND u.activo = TRUE
+       INNER JOIN locaciones l ON l.id = a.locacion_id
+       INNER JOIN turnos t ON t.id = a.turno_id
+       LEFT JOIN asistencias att
+         ON att.id = (
+           SELECT recent.id
+           FROM asistencias recent
+           WHERE recent.usuario_id = u.id
+             AND DATE(recent.entrada) = CURDATE()
+           ORDER BY recent.entrada DESC, recent.id DESC
+           LIMIT 1
+         )
+       WHERE a.activa = TRUE
+         AND CURDATE() BETWEEN a.fecha_inicio AND COALESCE(a.fecha_fin, '9999-12-31')
+         AND JSON_CONTAINS(a.dias_semana, CAST(WEEKDAY(CURDATE()) + 1 AS JSON), '$')
+       ORDER BY t.hora_entrada ASC, u.nombre ASC`
+    );
+
+    const summary = rows.reduce((total, item) => {
+      total.programados += 1;
+      if (item.estado_hoy === 'presente' || item.estado_hoy === 'en_turno') total.presentes += 1;
+      if (item.estado_hoy === 'retardo' || item.estado_hoy === 'retardo_en_curso') total.retardos += 1;
+      if (item.estado_hoy === 'pendiente') total.pendientes += 1;
+      if (item.estado_hoy === 'ausente') total.ausentes += 1;
+      if (item.estado_hoy === 'en_turno' || item.estado_hoy === 'retardo_en_curso') total.enTurno += 1;
+      return total;
+    }, { programados: 0, presentes: 0, retardos: 0, pendientes: 0, ausentes: 0, enTurno: 0 });
+
+    res.json({ summary, employees: rows });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error al consultar la vista de hoy' });
   }
 };
